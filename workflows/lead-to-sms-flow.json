@@ -1,0 +1,335 @@
+{
+  "name": "Lead to SMS Flow - POC",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-to-sms",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Receive Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "lead-to-sms-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "leadId",
+              "value": "={{ $json.body.leadId || 'LEAD-' + Math.random().toString(36).substr(2, 9).toUpperCase() }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.body.name }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $json.body.phone }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.body.email }}"
+            },
+            {
+              "name": "company",
+              "value": "={{ $json.body.company }}"
+            },
+            {
+              "name": "source",
+              "value": "webhook"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "process-lead",
+      "name": "Process Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://webhook.site/unique-id-here",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "action",
+              "value": "get_lead"
+            },
+            {
+              "name": "leadId",
+              "value": "={{ $json.leadId }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "company",
+              "value": "={{ $json.company }}"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "get-lead-from-crm",
+      "name": "Get Lead from CRM (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "message",
+              "value": "Hi {{ $json.name }}, thanks for your interest! We'll reach out soon. - {{ $json.company }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{ $json.leadId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-sms",
+      "name": "Prepare SMS",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://httpbin.org/post",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "provider",
+              "value": "mock-sms-service"
+            },
+            {
+              "name": "leadId",
+              "value": "={{ $json.leadId }}"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "send-sms",
+      "name": "Send SMS (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://httpbin.org/post",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "action",
+              "value": "update_lead_status"
+            },
+            {
+              "name": "leadId",
+              "value": "={{ $('Prepare SMS').item.json.leadId }}"
+            },
+            {
+              "name": "status",
+              "value": "sms_sent"
+            },
+            {
+              "name": "sms_sent_at",
+              "value": "={{ $now.toISO() }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $('Prepare SMS').item.json.to }}"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "update-crm",
+      "name": "Update CRM (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "leadId",
+              "value": "={{ $('Prepare SMS').item.json.leadId }}"
+            },
+            {
+              "name": "message",
+              "value": "Lead processed and SMS sent successfully"
+            },
+            {
+              "name": "sms_message",
+              "value": "={{ $('Prepare SMS').item.json.message }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $('Prepare SMS').item.json.to }}"
+            },
+            {
+              "name": "execution_time",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-response",
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1790, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Receive Lead": {
+      "main": [
+        [
+          {
+            "node": "Process Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Get Lead from CRM (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead from CRM (Mock)": {
+      "main": [
+        [
+          {
+            "node": "Prepare SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Mock)": {
+      "main": [
+        [
+          {
+            "node": "Update CRM (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update CRM (Mock)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "lead-to-sms-flow",
+  "tags": []
+}
