@@ -2,6 +2,44 @@
 
 ## Active Decisions
 
+### Repository Structure (2026-04-04) — Morpheus
+
+**Status:** Implemented
+
+**Context:**
+The automation repository was initially set up as a single-project POC for nVision's n8n automation platform. User requested reorganization to support multiple projects, demos, and customer-specific work.
+
+**Decision:**
+Reorganize the repository into a multi-purpose structure:
+
+```
+automations/
+├── demos/           # Demo projects and examples
+├── customers/       # Customer-specific automation work
+│   └── nvision/
+│       └── poc/     # The n8n POC
+├── common/          # Shared utilities, libraries, helpers
+├── .squad/          # Team state (remains at root)
+├── .github/         # GitHub workflows (remains at root)
+└── README.md        # Multi-project hub documentation
+```
+
+**Rationale:**
+1. **Scalability:** Allows multiple customer projects without conflicts
+2. **Organization:** Clear separation between demos, customer work, and shared code
+3. **Discoverability:** Each project has its own README and can be navigated independently
+4. **Git History:** Used `git mv` to preserve file history during reorganization
+5. **Flexibility:** Easy to add new customers or demo projects in the future
+
+**Implementation:**
+- Moved n8n POC files into `customers/nvision/poc/`
+- Created POC-specific README explaining the project
+- Updated root README to describe the multi-project structure
+- Added `.gitkeep` files to empty `demos/` and `common/` directories
+- All changes committed with descriptive commit message
+
+---
+
 ### POC Architecture (2026-04-04) — Morpheus
 
 **Status:** Approved for POC
