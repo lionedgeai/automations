@@ -94,3 +94,32 @@ Frontend POSTs to `http://localhost:5678/webhook/lead-to-sms` with lead data. n8
 - Phase 3: Next.js with TypeScript
 - Backend proxy for webhook security
 - Real authentication and authorization
+
+### 2026-04-04: Repository Restructured for Multi-Purpose Use
+
+**Decision:** Reorganized repo from single-project to multi-project structure.
+
+**New Top-Level Structure:**
+- `demos/` — Demo projects and examples
+- `customers/` — Customer-specific automation work (organized by customer name)
+- `common/` — Shared utilities, libraries, and helpers
+- `.squad/`, `.github/`, `.copilot/` remain at root
+
+**n8n POC Location:** Moved from root to `customers/nvision/poc/`
+
+**Files Moved:**
+- `docker-compose.yml`, `.env.example` → `customers/nvision/poc/`
+- `docker/`, `scripts/`, `ui/`, `workflows/`, `docs/` → `customers/nvision/poc/`
+- Created POC-specific README at `customers/nvision/poc/README.md`
+- Updated root `README.md` to describe multi-project hub structure
+
+**Benefits:**
+- Clear separation of different customer projects
+- Room for demo projects and shared utilities
+- Maintains git history through `git mv` commands
+- Each project remains self-contained with its own README
+
+**Key Paths:**
+- nVision POC: `customers/nvision/poc/`
+- Shared code: `common/`
+- Demos: `demos/`
