@@ -70,6 +70,30 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    build: ./api
+    container_name: nvision_api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB:-n8n}
+      - DB_USER=${POSTGRES_USER:-n8n}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-n8n_password}
+      - PORT=3001
+    networks:
+      - n8n_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --spider -q http://0.0.0.0:3001/api/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
     driver: local

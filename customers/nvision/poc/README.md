@@ -1,205 +1,190 @@
-# nVision n8n Automation POC
+# nVision Eye Centers — AI Campaign Platform Demo
 
-Self-hosted n8n workflow automation platform with custom UI for triggering workflows via API.
+End-to-end demo of AI-powered healthcare marketing automation for NVISION Eye Centers.
 
-## Quick Start
+## What It Shows
 
-### Prerequisites
-- Docker Desktop installed and running
-- PowerShell (Windows) or Bash (Linux/Mac)
+1. **Patient Extraction** — 50 mock patients from "Salesforce" with procedure interest, engagement scores, channel preferences
+2. **Natural Language Campaign Creation** — Type a prompt and watch 3 AI agents work (Data Analyst → Copywriter → Campaign Manager)
+3. **Multi-Tone Content Variants** — 5 email tones + 3 SMS tones per patient, selectable and regeneratable
+4. **Review & Approval Workflow** — Approve or reject campaigns before delivery
+5. **Blended Cadence Delivery** — Day 1: email → Day 3: SMS → Day 5: email → Day 7: SMS
+6. **Analytics Dashboard** — Open rates, click-throughs, conversions, per-campaign breakdowns
 
-### Setup
+---
 
-1. **Copy environment file:**
-   ```bash
-   cp .env.example .env
-   ```
+## Prerequisites
 
-2. **Generate secure API key (optional but recommended):**
-   ```bash
-   # On Linux/Mac:
-   openssl rand -hex 32
-   
-   # On Windows (PowerShell):
-   -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | % {[char]$_})
-   ```
-   
-   Update `N8N_API_KEY` in `.env` with the generated key.
+| Tool | Version | Check |
+|------|---------|-------|
+| Docker Desktop | 4.x+ | `docker --version` |
+| Node.js | 20+ | `node --version` |
+| npm | 9+ | `npm --version` |
+| Git | 2.x+ | `git --version` |
 
-3. **Run setup script:**
-   
-   **Windows (PowerShell):**
-   ```powershell
-   .\scripts\setup.ps1
-   ```
-   
-   **Linux/Mac:**
-   ```bash
-   chmod +x scripts/setup.sh
-   ./scripts/setup.sh
-   ```
+> **Docker must be running** before you start.
 
-4. **Access n8n UI:**
-   - URL: http://localhost:5678
-   - Default credentials: admin / admin (change in `.env`)
+---
 
-## Testing the POC
+## Quick Start (5 minutes)
 
-### Test via Webhook
+### Step 1: Start Backend Services
 
-The setup script automatically imports and activates the "Lead to SMS Flow" workflow.
-
-**Test with curl:**
-```bash
-curl -X POST http://localhost:5678/webhook/lead-to-sms \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Jane Smith",
-    "phone": "+1234567890",
-    "email": "jane@example.com",
-    "company": "Tech Startup Inc"
-  }'
+```powershell
+cd customers/nvision/poc
+docker compose up -d
 ```
 
-**Expected Response:**
-```json
-{
-  "status": "success",
-  "leadId": "LEAD-ABC123",
-  "message": "Lead processed and SMS sent successfully",
-  "sms_message": "Hi Jane Smith, thanks for your interest! We'll reach out soon. - Tech Startup Inc",
-  "phone": "+1234567890",
-  "execution_time": "2024-04-04T12:34:56.789Z"
-}
+This starts:
+- **PostgreSQL** (port 5432) — database
+- **n8n** (port 5678) — workflow engine
+- **API** (port 3001) — Express backend
+
+Wait for healthy status:
+```powershell
+docker compose ps
 ```
 
-### Workflow Details
+All 3 containers should show `running` / `healthy`.
 
-The POC workflow (`lead-to-sms-flow.json`) demonstrates:
+### Step 2: Initialize the Database
 
-1. **Webhook Trigger** - Receives POST requests with lead data
-2. **Process Lead** - Validates and enriches incoming data
-3. **Get Lead from CRM** - Mock API call to CRM (uses webhook.site)
-4. **Prepare SMS** - Formats SMS message
-5. **Send SMS** - Mock SMS provider call (uses httpbin.org)
-6. **Update CRM** - Mock CRM update with SMS status
-7. **Return Response** - Sends success response with execution details
+```powershell
+# Create tables
+docker exec -i n8n_postgres psql -U n8n -d n8n < scripts/init-demo-db.sql
 
-All external integrations use mock endpoints (httpbin.org, webhook.site) for POC purposes.
-
-## API Integration
-
-### Direct Webhook Calls
-
-Custom UI can directly call n8n webhooks:
-
-```javascript
-const response = await fetch('http://localhost:5678/webhook/lead-to-sms', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    name: 'John Doe',
-    phone: '+1234567890',
-    email: 'john@example.com',
-    company: 'Acme Corp'
-  })
-});
-
-const result = await response.json();
-console.log(result);
+# Seed demo data (50 patients, templates, campaigns, analytics)
+docker exec -i n8n_postgres psql -U n8n -d n8n < scripts/seed-demo-data.sql
 ```
 
-### n8n REST API
+### Step 3: Install & Start the UI
 
-For advanced operations (create/update workflows, check executions):
-
-```bash
-curl -X GET http://localhost:5678/api/v1/workflows \
-  -H "X-N8N-API-KEY: your-api-key" \
-  -u admin:admin
+```powershell
+cd ui
+npm install
+npm run dev
 ```
 
-See [n8n API docs](https://docs.n8n.io/api/) for full reference.
+### Step 4: Open the Demo
+
+- **UI:** http://localhost:3000
+- **API:** http://localhost:3001/api/health
+- **n8n:** http://localhost:5678 (admin@nvision-demo.com / Admin2026!)
+
+---
+
+## Demo Walkthrough (18 minutes)
+
+### 1. Dashboard (2 min)
+Open http://localhost:3000 — shows total patients, active campaigns, delivery stats, recent agent activity.
+
+### 2. Patients (3 min)
+Click **Patients** in sidebar. Shows 50 patients extracted from "Salesforce." Search, filter by procedure (LASIK, Cataract, Premium Lens), sort by engagement score. Click a patient to see details.
+
+### 3. Create a Campaign (5 min)
+Click **Campaigns** → **+ New Campaign**. Type a natural language prompt:
+
+> *"Send a year-end LASIK special to patients aged 25-45 with high engagement, running from December 1 to December 31"*
+
+Watch the 3 AI agents work in real-time:
+- 🔍 **Data Analyst** — Queries Salesforce, finds matching patients
+- ✍️ **Copywriter** — Generates 5 email tone variants + 3 SMS variants per patient
+- 📋 **Campaign Manager** — Builds blended email+SMS delivery schedule
+
+### 4. Review Content (4 min)
+Click into the new campaign. Review tone variants side-by-side:
+- Medical/Professional, Informative, Friendly, Casual, Empathetic
+- Select preferred tone per patient, or regenerate any variant
+- Preview both email and SMS content
+
+### 5. Approve & Deliver (2 min)
+Click **Approve Campaign** → delivery schedule populates automatically.
+Go to **Delivery Log** to see the blended cadence timeline.
+Click **Simulate Delivery** to show messages being "sent."
+
+### 6. Analytics (2 min)
+Click **Analytics** — view open rates, click-throughs, conversions.
+Per-campaign breakdown shows which campaigns perform best.
+
+---
+
+## Configuring Different Campaign Types
+
+The same workflow handles different campaign types — just change the prompt:
+
+| Campaign Type | Example Prompt |
+|---|---|
+| LASIK Promo | *"Year-end LASIK special for patients 25-45, December 1-31"* |
+| Cataract Education | *"Cataract awareness series for patients over 60, January through March"* |
+| Premium Lens Upsell | *"Premium lens upgrade for cataract patients with high engagement, next 2 weeks"* |
+| Re-engagement | *"Follow up with patients who haven't visited in 6 months"* |
+
+No rebuilding needed — the AI agents adapt content and targeting to each prompt.
+
+---
 
 ## Project Structure
 
 ```
 customers/nvision/poc/
-├── docker-compose.yml          # Docker orchestration
-├── .env.example               # Environment template
-├── workflows/                 # n8n workflow JSON files
-│   └── lead-to-sms-flow.json # Sample workflow
-├── scripts/                   # Setup automation
-│   ├── setup.ps1             # Windows setup
-│   └── setup.sh              # Linux/Mac setup
-├── ui/                        # Custom trigger UI
-│   └── index.html            # Workflow trigger page
-├── docker/                    # Docker configurations
-└── README.md                 # This file
+├── README.md                    # This file
+├── docker-compose.yml           # Docker orchestration (postgres + n8n + api)
+├── .env                         # Environment config
+├── api/                         # Express API backend
+│   ├── server.js               # All API endpoints (~1000 lines)
+│   ├── package.json            # Node dependencies
+│   └── Dockerfile              # Container build
+├── ui/                          # React frontend (Vite + TS + Tailwind)
+│   ├── src/pages/              # Dashboard, Patients, Campaigns, Analytics, Delivery
+│   ├── src/api/                # API clients with mock fallback
+│   └── src/components/         # Sidebar, PatientModal
+├── scripts/                     # Database setup
+│   ├── init-demo-db.sql        # 9 tables with indexes
+│   └── seed-demo-data.sql      # 50 patients, templates, campaigns, analytics
+├── workflows/                   # n8n workflow definitions
+└── docs/                        # Demo planning docs
 ```
 
-## Management
+## API Endpoints
 
-### Start/Stop Services
-
-```bash
-# Start
-docker-compose up -d
-
-# Stop
-docker-compose down
-
-# View logs
-docker-compose logs -f n8n
-
-# Restart
-docker-compose restart
-```
-
-### Import Additional Workflows
-
-Via UI:
-1. Open http://localhost:5678
-2. Click "Import from File"
-3. Select workflow JSON file
-
-Via API:
-```bash
-curl -X POST http://localhost:5678/api/v1/workflows \
-  -H "X-N8N-API-KEY: your-api-key" \
-  -u admin:admin \
-  -H "Content-Type: application/json" \
-  -d @workflows/your-workflow.json
-```
-
-## Next Steps
-
-1. **Replace Mock APIs**: Update workflow nodes to use real Salesforce, Twilio, etc.
-2. **Add Authentication**: Implement webhook authentication/API keys
-3. **Build Custom UI**: Create React/Vue app to trigger workflows
-4. **Production Config**: Update `.env` with secure credentials
-5. **Monitoring**: Add logging, alerting, and execution tracking
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/patients` | List patients (with search/filter) |
+| GET | `/api/patients/:id` | Patient detail |
+| GET | `/api/templates` | Campaign templates |
+| GET | `/api/campaigns` | List campaigns |
+| GET | `/api/campaigns/:id` | Campaign detail |
+| POST | `/api/campaigns` | Create campaign from prompt |
+| GET | `/api/campaigns/:id/variants` | Content variants |
+| POST | `/api/campaigns/:id/variants/:vid/select` | Select variant |
+| POST | `/api/campaigns/:id/variants/:vid/regenerate` | Regenerate variant |
+| POST | `/api/campaigns/:id/approve` | Approve campaign |
+| POST | `/api/campaigns/:id/reject` | Reject campaign |
+| GET | `/api/delivery` | Delivery log |
+| POST | `/api/delivery/simulate` | Simulate sending |
+| GET | `/api/analytics` | Overall analytics |
+| GET | `/api/analytics/:campaignId` | Per-campaign analytics |
+| GET | `/api/dashboard/stats` | Dashboard statistics |
+| GET | `/api/summaries` | Daily summary reports |
+| GET | `/api/agent-activity/:campaignId` | Agent pipeline activity |
 
 ## Troubleshooting
 
-**n8n won't start:**
-```bash
-docker-compose logs n8n
-docker-compose logs postgres
+| Problem | Solution |
+|---|---|
+| Port 3001 returns HTML | A stray Node process is on port 3001. Run `netstat -ano \| findstr :3001` and kill the non-Docker PID |
+| Docker containers unhealthy | `docker compose down && docker compose up -d` |
+| DB tables don't exist | Re-run `docker exec -i n8n_postgres psql -U n8n -d n8n < scripts/init-demo-db.sql` |
+| UI won't start | Delete `ui/node_modules` and re-run `npm install` |
+| API returns empty results | Re-run seed: `docker exec -i n8n_postgres psql -U n8n -d n8n < scripts/seed-demo-data.sql` |
+
+## Teardown
+
+```powershell
+# Stop everything
+docker compose down
+
+# Stop and remove all data
+docker compose down -v
 ```
-
-**Webhook not responding:**
-- Check workflow is active in n8n UI
-- Verify webhook path matches URL
-- Check execution history in n8n
-
-**API calls failing:**
-- Verify `N8N_API_KEY` matches `.env`
-- Check basic auth credentials
-- Ensure n8n is fully started (wait 30s after `docker-compose up`)
-
-## Documentation
-
-- [n8n Documentation](https://docs.n8n.io/)
-- [n8n API Reference](https://docs.n8n.io/api/)
-- [Docker Compose Reference](https://docs.docker.com/compose/)

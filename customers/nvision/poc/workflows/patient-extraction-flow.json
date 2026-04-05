@@ -1,0 +1,208 @@
+{
+  "id": "patient-extraction-flow",
+  "name": "Patient Extraction API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "patients",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "patient-extraction-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  id,\n  salesforce_id,\n  first_name,\n  last_name,\n  email,\n  phone,\n  procedure_interest,\n  last_visit_date,\n  consultation_notes,\n  call_recording_summary,\n  engagement_score,\n  preferred_channel,\n  created_at\nFROM patients\nWHERE 1=1\n  {{ $parameter[\"queryParameters\"][\"procedure_interest\"] ? \"AND procedure_interest = '\" + $parameter[\"queryParameters\"][\"procedure_interest\"] + \"'\" : \"\" }}\n  {{ $parameter[\"queryParameters\"][\"min_engagement_score\"] ? \"AND engagement_score >= \" + $parameter[\"queryParameters\"][\"min_engagement_score\"] : \"\" }}\n  {{ $parameter[\"queryParameters\"][\"preferred_channel\"] ? \"AND preferred_channel = '\" + $parameter[\"queryParameters\"][\"preferred_channel\"] + \"'\" : \"\" }}\nORDER BY engagement_score DESC, last_visit_date DESC\nLIMIT {{ $parameter[\"queryParameters\"][\"limit\"] || 50 }};",
+        "additionalFields": {}
+      },
+      "id": "postgres-query",
+      "name": "PostgreSQL Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "n8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the patient data for clean JSON response\nconst patients = items.map(item => ({\n  id: item.json.id,\n  salesforceId: item.json.salesforce_id,\n  firstName: item.json.first_name,\n  lastName: item.json.last_name,\n  fullName: `${item.json.first_name} ${item.json.last_name}`,\n  email: item.json.email,\n  phone: item.json.phone,\n  procedureInterest: item.json.procedure_interest,\n  lastVisitDate: item.json.last_visit_date,\n  consultationNotes: item.json.consultation_notes,\n  callRecordingSummary: item.json.call_recording_summary,\n  engagementScore: item.json.engagement_score,\n  preferredChannel: item.json.preferred_channel,\n  createdAt: item.json.created_at\n}));\n\nreturn [{\n  json: {\n    success: true,\n    count: patients.length,\n    patients: patients,\n    filters: {\n      procedureInterest: $('Webhook Trigger').item.json.query?.procedure_interest || null,\n      minEngagementScore: $('Webhook Trigger').item.json.query?.min_engagement_score ? parseInt($('Webhook Trigger').item.json.query.min_engagement_score) : null,\n      preferredChannel: $('Webhook Trigger').item.json.query?.preferred_channel || null\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "patients/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-single-patient",
+      "name": "Webhook Single Patient",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 500],
+      "webhookId": "patient-detail-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  id,\n  salesforce_id,\n  first_name,\n  last_name,\n  email,\n  phone,\n  procedure_interest,\n  last_visit_date,\n  consultation_notes,\n  call_recording_summary,\n  engagement_score,\n  preferred_channel,\n  created_at\nFROM patients\nWHERE id = {{ $parameter[\"pathParameters\"][\"id\"] }}\nLIMIT 1;",
+        "additionalFields": {}
+      },
+      "id": "postgres-single",
+      "name": "PostgreSQL Single",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [450, 500],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "n8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format single patient detail response\nif (items.length === 0) {\n  return [{\n    json: {\n      success: false,\n      error: 'Patient not found',\n      patientId: $('Webhook Single Patient').item.json.params.id,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\nconst patient = items[0].json;\n\nreturn [{\n  json: {\n    success: true,\n    patient: {\n      id: patient.id,\n      salesforceId: patient.salesforce_id,\n      firstName: patient.first_name,\n      lastName: patient.last_name,\n      fullName: `${patient.first_name} ${patient.last_name}`,\n      email: patient.email,\n      phone: patient.phone,\n      procedureInterest: patient.procedure_interest,\n      lastVisitDate: patient.last_visit_date,\n      consultationNotes: patient.consultation_notes,\n      callRecordingSummary: patient.call_recording_summary,\n      engagementScore: patient.engagement_score,\n      preferredChannel: patient.preferred_channel,\n      createdAt: patient.created_at\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-single-response",
+      "name": "Format Single Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-single",
+      "name": "Respond Single",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL Query": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Single Patient": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL Single",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL Single": {
+      "main": [
+        [
+          {
+            "node": "Format Single Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Single Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Single",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "updatedAt": "2026-04-04T20:00:00.000Z",
+  "versionId": "1"
+}
