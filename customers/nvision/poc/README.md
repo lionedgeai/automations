@@ -26,9 +26,31 @@ End-to-end demo of AI-powered healthcare marketing automation for NVISION Eye Ce
 
 ---
 
-## Quick Start (5 minutes)
+## Quick Start (one command)
 
-### Step 1: Start Backend Services
+```powershell
+cd customers/nvision/poc
+.\scripts\start-demo.ps1
+```
+
+This single script:
+1. Checks prerequisites (Docker, Node.js, npm)
+2. Kills any stray processes on ports 3000/3001
+3. Starts Docker services (PostgreSQL + n8n + API)
+4. Creates database tables and seeds 50 demo patients
+5. Installs UI dependencies and starts the dev server
+6. Opens http://localhost:3000 in your browser
+
+**Options:**
+```powershell
+.\scripts\start-demo.ps1 -Stop          # Stop all services
+.\scripts\start-demo.ps1 -Reset         # Wipe data and restart fresh
+.\scripts\start-demo.ps1 -SkipBrowser   # Don't auto-open browser
+```
+
+### Manual Start (step-by-step)
+
+#### Step 1: Start Backend Services
 
 ```powershell
 cd customers/nvision/poc
