@@ -139,6 +139,17 @@ export async function regenerateVariant(
   }
 }
 
+export async function deleteCampaign(id: number): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE}/campaigns/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('API not ready');
+  } catch {
+    console.log(`Mock: Deleted campaign ${id}`);
+  }
+}
+
 export async function approveCampaign(
   id: number,
   dateRange?: { start: string; end: string }

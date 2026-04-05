@@ -15,6 +15,7 @@ import {
   selectVariant,
   regenerateVariant,
   approveCampaign,
+  deleteCampaign,
 } from '../api/campaigns';
 import { getCampaignRecipients } from '../api/analytics';
 
@@ -40,6 +41,13 @@ export default function CampaignsPage() {
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [selectedTone, setSelectedTone] = useState<string>('Friendly');
   const [regenerating, setRegenerating] = useState<number | null>(null);
+
+  async function handleDeleteCampaign(e: React.MouseEvent, campaignId: number) {
+    e.stopPropagation();
+    if (!confirm('Delete this campaign and all its data?')) return;
+    await deleteCampaign(campaignId);
+    setCampaigns(campaigns.filter(c => c.id !== campaignId));
+  }
 
   useEffect(() => {
     async function loadData() {
@@ -278,6 +286,9 @@ export default function CampaignsPage() {
                   <th className="text-left py-3 px-4 text-slate-400 font-medium">
                     Created
                   </th>
+                  <th className="text-right py-3 px-4 text-slate-400 font-medium">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -313,6 +324,15 @@ export default function CampaignsPage() {
                     </td>
                     <td className="py-3 px-4 text-slate-400">
                       {new Date(campaign.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        onClick={(e) => handleDeleteCampaign(e, campaign.id)}
+                        className="px-2 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
+                        title="Delete campaign"
+                      >
+                        🗑 Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

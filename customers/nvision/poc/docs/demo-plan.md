@@ -563,6 +563,7 @@ Tomorrow: Follow-up email to 15 non-openers scheduled for 9 AM
 | `patient-extraction-flow` | Called by prompt-parser | PostgreSQL query based on parsed segment → Update agent activity | Patient list JSON |
 | `campaign-generation-flow` | Webhook (POST /api/campaigns/generate) | Loop patients → OpenAI/Claude API (generate 5-10 tone variants per message) → Store variants | Campaign ID + tone variants |
 | `approval-workflow` | Webhook (POST /api/campaigns/:id/approve) | Update status → Schedule blended email+SMS delivery → Notify | Confirmation JSON |
+| `campaign-delete` | DELETE /api/campaigns/:id | Cascade-delete all campaign data (variants, recipients, delivery, analytics, activity) | Deletion confirmation |
 | `delivery-workflow` | Cron (every 5 min) OR manual trigger | Query scheduled (both email & SMS) → Mock API calls → Update log → Trigger daily summary if end-of-day | Delivery confirmations |
 | `daily-summary-flow` | Cron (daily at 7 AM) OR triggered by delivery-workflow | Aggregate previous day metrics → Generate summary report → Send to dashboard | Daily summary report |
 | `analytics-aggregation-flow` | Cron (every 5 min) | Query logs → Aggregate metrics (email + SMS combined) → Store | Updated metrics |

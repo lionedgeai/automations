@@ -576,6 +576,37 @@ app.post('/api/campaigns/:id/reject', async (req, res) => {
   }
 });
 
+app.delete('/api/campaigns/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const cid = parseInt(id);
+
+    await client.query('BEGIN');
+    await client.query('DELETE FROM agent_activity_log WHERE campaign_id = $1', [cid]);
+    await client.query('DELETE FROM analytics_metrics WHERE campaign_id = $1', [cid]);
+    await client.query('DELETE FROM daily_summary_reports WHERE campaign_id = $1', [cid]);
+    // delivery_log cascades via campaign_recipients FK
+    await client.query('DELETE FROM delivery_log WHERE campaign_recipient_id IN (SELECT id FROM campaign_recipients WHERE campaign_id = $1)', [cid]);
+    await client.query('DELETE FROM campaign_content_variants WHERE campaign_id = $1', [cid]);
+    await client.query('DELETE FROM campaign_recipients WHERE campaign_id = $1', [cid]);
+    const result = await client.query('DELETE FROM campaigns WHERE id = $1 RETURNING id, name', [cid]);
+    await client.query('COMMIT');
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    res.json({ deleted: true, campaign: result.rows[0] });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting campaign:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ============ Delivery Log ============
 
 app.get('/api/delivery', async (req, res) => {
