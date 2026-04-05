@@ -72,6 +72,11 @@ export default function CampaignsPage() {
             setSelectedPatientId(variantsData[0].patient_id);
           }
           setMode('detail');
+        } else {
+          setMode('list');
+          setCurrentCampaign(null);
+          setVariants([]);
+          setRecipients([]);
         }
       } catch (error) {
         console.error('Error loading campaigns:', error);
@@ -86,6 +91,11 @@ export default function CampaignsPage() {
     if (!promptText.trim()) return;
 
     setShowAgentPanel(true);
+
+    // Fire API call immediately (runs in background)
+    const apiPromise = createCampaign(promptText, selectedTemplateId);
+
+    // Animate agent activity in parallel
     const activities: AgentActivity[] = [
       {
         id: 1,
@@ -98,69 +108,63 @@ export default function CampaignsPage() {
     ];
     setAgentActivities([...activities]);
 
-    setTimeout(async () => {
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    await delay(2000);
+    activities[0].status = 'completed';
+    activities[0].activity_message = 'Found matching patients';
+    activities.push({
+      id: 2,
+      campaign_id: 0,
+      agent_name: 'Copywriter',
+      activity_message: 'Generating personalized content with 5 tone variations...',
+      status: 'running',
+      created_at: new Date().toISOString(),
+    });
+    setAgentActivities([...activities]);
+
+    await delay(2000);
+    activities.push({
+      id: 3,
+      campaign_id: 0,
+      agent_name: 'Campaign Manager',
+      activity_message: 'Building blended email+SMS delivery schedule...',
+      status: 'running',
+      created_at: new Date().toISOString(),
+    });
+    setAgentActivities([...activities]);
+
+    // Wait for the real API call to finish
+    try {
+      const newCampaign = await apiPromise;
+
+      // Mark all as completed
+      for (const a of activities) a.status = 'completed';
+      activities[1].activity_message = 'Content ready for review';
+      activities[2].activity_message = `Cadence set — ${newCampaign.recipient_count || 0} recipients scheduled`;
       activities.push({
-        id: 2,
+        id: 4,
         campaign_id: 0,
-        agent_name: 'Data Analyst',
-        activity_message: 'Found 20 patients matching criteria',
+        agent_name: 'Campaign Manager',
+        activity_message: '✅ Campaign ready for review',
         status: 'completed',
-        created_at: new Date().toISOString(),
-      });
-      activities.push({
-        id: 3,
-        campaign_id: 0,
-        agent_name: 'Copywriter',
-        activity_message:
-          'Generating personalized content with 5 tone variations...',
-        status: 'running',
         created_at: new Date().toISOString(),
       });
       setAgentActivities([...activities]);
 
-      setTimeout(async () => {
-        activities[2].status = 'completed';
-        activities.push({
-          id: 4,
-          campaign_id: 0,
-          agent_name: 'Copywriter',
-          activity_message: 'Content ready for review',
-          status: 'completed',
-          created_at: new Date().toISOString(),
-        });
-        activities.push({
-          id: 5,
-          campaign_id: 0,
-          agent_name: 'Campaign Manager',
-          activity_message: 'Building blended email+SMS delivery schedule...',
-          status: 'running',
-          created_at: new Date().toISOString(),
-        });
-        setAgentActivities([...activities]);
-
-        setTimeout(async () => {
-          activities[4].status = 'completed';
-          activities.push({
-            id: 6,
-            campaign_id: 0,
-            agent_name: 'Campaign Manager',
-            activity_message: '4-week cadence set — 20 emails + 12 SMS scheduled',
-            status: 'completed',
-            created_at: new Date().toISOString(),
-          });
-          setAgentActivities([...activities]);
-
-          const newCampaign = await createCampaign(
-            promptText,
-            selectedTemplateId
-          );
-          setTimeout(() => {
-            navigate(`/campaigns/${newCampaign.id}`);
-            window.location.reload();
-          }, 1000);
-        }, 2000);
-      }, 3000);
-    }, 2000);
+      await delay(1000);
+      navigate(`/campaigns/${newCampaign.id}`);
+    } catch (err) {
+      activities.push({
+        id: 99,
+        campaign_id: 0,
+        agent_name: 'System',
+        activity_message: `❌ Campaign creation failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        status: 'completed',
+        created_at: new Date().toISOString(),
+      });
+      setAgentActivities([...activities]);
+    }
   };
 
   const handleApprove = async () => {

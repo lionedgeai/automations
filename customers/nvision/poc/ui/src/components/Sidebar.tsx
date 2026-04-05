@@ -6,6 +6,7 @@ const navItems = [
   { path: '/campaigns', label: 'Campaigns', icon: '🚀' },
   { path: '/analytics', label: 'Analytics', icon: '📈' },
   { path: '/delivery', label: 'Delivery Log', icon: '📋' },
+  { path: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export default function Sidebar() {

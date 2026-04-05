@@ -5,6 +5,7 @@ import PatientsPage from './pages/PatientsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import DeliveryLogPage from './pages/DeliveryLogPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/campaigns/:id" element={<CampaignsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/delivery" element={<DeliveryLogPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
       </div>

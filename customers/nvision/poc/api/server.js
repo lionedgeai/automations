@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const { getAIProvider } = require('./ai/provider');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,10 +38,78 @@ app.use((req, res, next) => {
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected' });
+    const ai = getAIProvider();
+    res.json({ status: 'ok', db: 'connected', ai_provider: ai.name });
   } catch (error) {
     console.error('Health check failed:', error);
     res.status(500).json({ status: 'error', db: 'disconnected', error: error.message });
+  }
+});
+
+app.get('/api/ai/status', (req, res) => {
+  const config = require('./ai/provider').getProviderConfig();
+  const ai = getAIProvider();
+  res.json({
+    active_provider: ai.name,
+    configured: {
+      anthropic: !!config.anthropic.apiKey,
+      openai: !!config.openai.apiKey,
+      github: !!config.github.apiKey,
+      mock: true,
+    },
+    models: {
+      anthropic: config.anthropic.model,
+      openai: config.openai.model,
+      github: config.github.model,
+    },
+  });
+});
+
+app.post('/api/ai/config', (req, res) => {
+  const { provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model, github_token, github_model } = req.body;
+
+  if (provider) process.env.AI_PROVIDER = provider;
+  if (anthropic_api_key !== undefined) process.env.ANTHROPIC_API_KEY = anthropic_api_key;
+  if (anthropic_model) process.env.ANTHROPIC_MODEL = anthropic_model;
+  if (openai_api_key !== undefined) process.env.OPENAI_API_KEY = openai_api_key;
+  if (openai_model) process.env.OPENAI_MODEL = openai_model;
+  if (github_token !== undefined) process.env.GITHUB_TOKEN = github_token;
+  if (github_model) process.env.GITHUB_MODEL = github_model;
+
+  // Reset provider so next call picks up new config
+  const { resetProvider, getProviderConfig } = require('./ai/provider');
+  resetProvider();
+
+  const ai = getAIProvider();
+  const config = getProviderConfig();
+  console.log(`[AI] Provider switched to: ${ai.name}`);
+
+  res.json({
+    active_provider: ai.name,
+    configured: {
+      anthropic: !!config.anthropic.apiKey,
+      openai: !!config.openai.apiKey,
+      github: !!config.github.apiKey,
+      mock: true,
+    },
+    models: {
+      anthropic: config.anthropic.model,
+      openai: config.openai.model,
+      github: config.github.model,
+    },
+  });
+});
+
+app.post('/api/ai/test', async (req, res) => {
+  const ai = getAIProvider();
+  if (ai.name === 'mock') {
+    return res.json({ success: true, provider: 'mock', message: 'Mock provider is always available' });
+  }
+  try {
+    await ai.parsePrompt('Test LASIK campaign');
+    res.json({ success: true, provider: ai.name, message: `${ai.name} is working correctly` });
+  } catch (err) {
+    res.json({ success: false, provider: ai.name, message: err.message });
   }
 });
 
@@ -196,8 +265,25 @@ app.post('/api/campaigns', async (req, res) => {
     }
     
     await client.query('BEGIN');
-    
-    const parsedParams = parsePromptText(prompt_text);
+    const ai = getAIProvider();
+    const { MockAIClient } = require('./ai/mock');
+    const mockFallback = new MockAIClient();
+    let usedFallback = false;
+
+    async function tryAI(fn, mockFn) {
+      try {
+        return await fn(ai);
+      } catch (err) {
+        console.warn(`[AI] Provider error, falling back to mock: ${err.message}`);
+        usedFallback = true;
+        return await mockFn(mockFallback);
+      }
+    }
+
+    const parsedParams = await tryAI(
+      (p) => p.parsePrompt(prompt_text),
+      (p) => p.parsePrompt(prompt_text)
+    );
     
     const campaignResult = await client.query(`
       INSERT INTO campaigns (
@@ -228,7 +314,8 @@ app.post('/api/campaigns', async (req, res) => {
       VALUES ($1, 'Data Analyst', 'Querying Salesforce for matching patients...', 'running', $2)
     `, [campaignId, new Date(baseTime.getTime())]);
     
-    const patientsResult = await client.query(buildPatientQuery(parsedParams));
+    const patientQuery = buildPatientQuery(parsedParams);
+    const patientsResult = await client.query(patientQuery.text, patientQuery.values);
     const matchedPatients = patientsResult.rows;
     
     await client.query(`
@@ -266,7 +353,10 @@ app.post('/api/campaigns', async (req, res) => {
       // Generate 5 email tone variants
       const tones = ['Medical/Professional', 'Informative', 'Friendly', 'Casual', 'Empathetic'];
       for (let i = 0; i < tones.length; i++) {
-        const content = generateToneVariant(patient, parsedParams, tones[i]);
+        const content = await tryAI(
+          (p) => p.generateEmail(patient, parsedParams, tones[i]),
+          (p) => p.generateEmail(patient, parsedParams, tones[i])
+        );
         const isSelected = tones[i] === 'Informative';
         
         await client.query(`
@@ -281,7 +371,10 @@ app.post('/api/campaigns', async (req, res) => {
       if (patient.preferred_channel === 'both' || patient.preferred_channel === 'sms') {
         const smsTones = ['Informative', 'Friendly', 'Casual'];
         for (let i = 0; i < smsTones.length; i++) {
-          const smsContent = generateSMSVariant(patient, parsedParams, smsTones[i]);
+          const smsContent = await tryAI(
+            (p) => p.generateSMS(patient, parsedParams, smsTones[i]),
+            (p) => p.generateSMS(patient, parsedParams, smsTones[i])
+          );
           const isSelected = smsTones[i] === 'Friendly';
           
           await client.query(`
@@ -327,7 +420,7 @@ app.post('/api/campaigns', async (req, res) => {
       WHERE c.id = $1
     `, [campaignId]);
     
-    res.status(201).json(finalResult.rows[0]);
+    res.status(201).json({ ...finalResult.rows[0], ai_fallback: usedFallback });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating campaign:', error);
@@ -433,10 +526,12 @@ app.post('/api/campaigns/:id/variants/:variantId/regenerate', async (req, res) =
     const newTone = tone_label || original.tone_label;
     
     let newContent;
+    const ai = getAIProvider();
     if (original.message_type === 'email') {
-      newContent = regenerateToneVariant(patient, parsedParams, newTone, original.content);
+      newContent = await ai.regenerateEmail(patient, parsedParams, newTone, { subject: original.subject_line, body: original.content });
     } else {
-      newContent = { subject: null, body: regenerateSMSVariant(patient, parsedParams, newTone, original.content) };
+      const smsText = await ai.regenerateSMS(patient, parsedParams, newTone, original.content);
+      newContent = { subject: null, body: smsText };
     }
     
     const insertResult = await pool.query(`
@@ -903,157 +998,24 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
 // ============ Helper Functions ============
 
-function parsePromptText(promptText) {
-  const lower = promptText.toLowerCase();
-  
-  let procedure = null;
-  if (lower.includes('lasik')) procedure = 'LASIK';
-  else if (lower.includes('cataract')) procedure = 'Cataract Surgery';
-  else if (lower.includes('premium lens') || lower.includes('lens upgrade')) procedure = 'Premium Lens Upgrade';
-  
-  let campaignName = 'AI Generated Campaign';
-  if (procedure) {
-    campaignName = `${procedure} Campaign`;
-  }
-  if (lower.includes('summer')) campaignName = `Summer ${procedure || 'Vision'} Promotion`;
-  if (lower.includes('spring')) campaignName = `Spring ${procedure || 'Vision'} Promotion`;
-  if (lower.includes('fall') || lower.includes('autumn')) campaignName = `Fall ${procedure || 'Vision'} Promotion`;
-  if (lower.includes('winter')) campaignName = `Winter ${procedure || 'Vision'} Promotion`;
-  if (lower.includes('education')) campaignName = `${procedure || 'Vision'} Education Series`;
-  
-  const now = new Date();
-  let dateStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let dateEnd = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
-  
-  const monthMatch = lower.match(/through\s+(january|february|march|april|may|june|july|august|september|october|november|december)/);
-  if (monthMatch) {
-    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-    const monthIndex = months.indexOf(monthMatch[1]);
-    dateEnd = new Date(now.getFullYear(), monthIndex, 28);
-    if (dateEnd < dateStart) {
-      dateEnd = new Date(now.getFullYear() + 1, monthIndex, 28);
-    }
-  }
-  
-  let minEngagement = 0;
-  if (lower.includes('high engagement')) minEngagement = 70;
-  else if (lower.includes('medium engagement')) minEngagement = 50;
-  else if (lower.includes('engaged')) minEngagement = 60;
-  
-  return {
-    campaignName,
-    procedure,
-    minEngagement,
-    dateStart,
-    dateEnd,
-    segment: lower.includes('haven\'t converted') ? 'unconverted' : 'all'
-  };
-}
-
 function buildPatientQuery(params) {
   let query = 'SELECT * FROM patients WHERE 1=1';
-  const conditions = [];
+  const values = [];
+  let paramIndex = 1;
   
   if (params.procedure) {
-    conditions.push(`procedure_interest = '${params.procedure}'`);
+    query += ` AND procedure_interest = $${paramIndex++}`;
+    values.push(params.procedure);
   }
   
   if (params.minEngagement > 0) {
-    conditions.push(`engagement_score >= ${params.minEngagement}`);
-  }
-  
-  if (conditions.length > 0) {
-    query += ' AND ' + conditions.join(' AND ');
+    query += ` AND engagement_score >= $${paramIndex++}`;
+    values.push(params.minEngagement);
   }
   
   query += ' ORDER BY engagement_score DESC LIMIT 20';
   
-  return query;
-}
-
-function generateToneVariant(patient, params, tone) {
-  const procedure = params.procedure || patient.procedure_interest;
-  const firstName = patient.first_name;
-  const fullName = `${patient.first_name} ${patient.last_name}`;
-  
-  const subjects = {
-    'Medical/Professional': `Important Information Regarding ${procedure} at nVision`,
-    'Informative': `${procedure}: What You Need to Know`,
-    'Friendly': `Hi ${firstName}, Let's Talk About Your ${procedure} Options`,
-    'Casual': `${firstName}, Ready to See Clearer? 👓`,
-    'Empathetic': `${firstName}, We Understand Your Vision Concerns`
-  };
-  
-  const intros = {
-    'Medical/Professional': `Dear ${fullName},\n\nBased on your recent consultation regarding ${procedure}, we wanted to provide you with comprehensive information about this procedure.`,
-    'Informative': `Hello ${fullName},\n\nThank you for your interest in ${procedure}. Here's what you should know about your options.`,
-    'Friendly': `Hi ${firstName}!\n\nIt was great speaking with you about ${procedure}. I wanted to follow up with some helpful information.`,
-    'Casual': `Hey ${firstName},\n\nSo you're thinking about ${procedure}? Let me break it down for you in simple terms.`,
-    'Empathetic': `Dear ${firstName},\n\nWe know that considering ${procedure} is a big decision, and we're here to support you every step of the way.`
-  };
-  
-  const consultationRef = patient.consultation_notes ? 
-    `\n\nDuring your consultation, you mentioned ${patient.consultation_notes.substring(0, 100)}...` : '';
-  
-  const bodies = {
-    'Medical/Professional': `${intros['Medical/Professional']}${consultationRef}\n\n${procedure} is a clinically proven procedure with a high success rate. Our board-certified ophthalmologists utilize state-of-the-art technology to ensure optimal outcomes.\n\nWe recommend scheduling a comprehensive evaluation to determine your candidacy and discuss the specific benefits relevant to your visual needs.\n\nPlease contact our office at your earliest convenience.\n\nSincerely,\nnVision Centers Medical Team`,
-    'Informative': `${intros['Informative']}${consultationRef}\n\n${procedure} can significantly improve your vision and quality of life. The procedure typically takes 15-30 minutes, with most patients experiencing improved vision within 24-48 hours.\n\nKey benefits include:\n• Reduced dependence on glasses/contacts\n• Quick recovery time\n• Long-lasting results\n\nWe'd love to schedule a follow-up consultation to answer any questions.\n\nBest regards,\nThe nVision Team`,
-    'Friendly': `${intros['Friendly']}${consultationRef}\n\nI know you had some great questions during our chat, and I wanted to make sure you have all the info you need to make the best decision for your eyes.\n\n${procedure} has helped thousands of people just like you achieve clearer vision. Imagine waking up and being able to see clearly without reaching for your glasses!\n\nWant to chat more? Just give us a call or reply to this email.\n\nLooking forward to hearing from you!\nYour friends at nVision`,
-    'Casual': `${intros['Casual']}${consultationRef}\n\nLook, I get it - vision correction surgery sounds intimidating. But here's the thing: it's actually pretty straightforward, and the results are amazing.\n\nMost of our patients wish they'd done it sooner. Seriously.\n\nIf you're ready to ditch the glasses or contacts, let's make it happen. We're here to answer any questions, no pressure.\n\nShoot us a message anytime!\nThe nVision Crew`,
-    'Empathetic': `${intros['Empathetic']}${consultationRef}\n\nWe understand that you may have concerns about the procedure, cost, or recovery time. These are completely normal feelings, and we're here to address each one.\n\nMany of our patients felt the same way you do now, and they're thrilled with their decision. We'll work with you to create a personalized plan that fits your needs and timeline.\n\nYou're not alone in this journey. Our caring team is here to support you.\n\nWarm regards,\nThe nVision Family`
-  };
-  
-  return {
-    subject: subjects[tone],
-    body: bodies[tone]
-  };
-}
-
-function generateSMSVariant(patient, params, tone) {
-  const firstName = patient.first_name;
-  const procedure = params.procedure || patient.procedure_interest;
-  
-  const messages = {
-    'Informative': `Hi ${firstName}, this is nVision Centers. Ready to learn more about ${procedure}? We can answer all your questions. Reply YES for a callback.`,
-    'Friendly': `Hey ${firstName}! 👋 It's nVision. Still thinking about ${procedure}? We'd love to chat and help you out. Text back anytime!`,
-    'Casual': `${firstName}, quick question - still interested in clearer vision? ${procedure} could be perfect for you. Let's talk! Reply to connect.`
-  };
-  
-  return messages[tone];
-}
-
-function regenerateToneVariant(patient, params, tone, originalContent) {
-  const base = generateToneVariant(patient, params, tone);
-  
-  const variations = [
-    'Additionally, ',
-    'Furthermore, ',
-    'Moreover, ',
-    'What\'s more, ',
-    'Also worth noting: '
-  ];
-  
-  const randomVariation = variations[Math.floor(Math.random() * variations.length)];
-  
-  return {
-    subject: base.subject + ' (Updated)',
-    body: base.body.replace('significantly', 'dramatically')
-                  .replace('comprehensive', 'thorough')
-                  .replace('optimal', 'excellent')
-                  .replace('great', 'wonderful')
-                  .replace('\n\n', `\n\n${randomVariation}`)
-  };
-}
-
-function regenerateSMSVariant(patient, params, tone, originalContent) {
-  const base = generateSMSVariant(patient, params, tone);
-  
-  const emojis = ['✨', '💙', '👁️', '⭐'];
-  const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-  
-  return base.replace('?', `? ${randomEmoji}`)
-            .replace('anytime', 'whenever')
-            .replace('Ready', 'Excited');
+  return { text: query, values };
 }
 
 app.use((req, res) => {
@@ -1061,7 +1023,9 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+  const ai = getAIProvider();
   console.log(`nVision Demo API server running on port ${PORT}`);
+  console.log(`AI Provider: ${ai.name}`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
 });
 
