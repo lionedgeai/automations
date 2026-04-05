@@ -689,51 +689,17 @@ app.post('/api/delivery/simulate', async (req, res) => {
 
 app.get('/api/analytics', async (req, res) => {
   try {
-    const overallResult = await pool.query(`
+    const result = await pool.query(`
       SELECT 
-        SUM(emails_sent) as total_emails_sent,
-        SUM(sms_sent) as total_sms_sent,
-        SUM(emails_sent + sms_sent) as total_sent,
-        SUM(emails_opened) as total_opened,
-        SUM(emails_clicked) as total_clicked,
-        SUM(conversions) as total_conversions,
-        CASE 
-          WHEN SUM(emails_sent) > 0 
-          THEN ROUND((SUM(emails_opened)::numeric / SUM(emails_sent)::numeric * 100), 1)
-          ELSE 0 
-        END as open_rate,
-        CASE 
-          WHEN SUM(emails_sent) > 0 
-          THEN ROUND((SUM(emails_clicked)::numeric / SUM(emails_sent)::numeric * 100), 1)
-          ELSE 0 
-        END as click_rate
+        id, campaign_id, metric_date,
+        emails_sent, emails_opened, emails_clicked,
+        sms_sent, COALESCE(sms_replied, 0) as sms_replied,
+        conversions
       FROM analytics_metrics
+      ORDER BY metric_date ASC
     `);
     
-    const perCampaignResult = await pool.query(`
-      SELECT 
-        c.id as campaign_id,
-        c.name as campaign_name,
-        SUM(am.emails_sent) as emails_sent,
-        SUM(am.sms_sent) as sms_sent,
-        SUM(am.emails_opened) as emails_opened,
-        SUM(am.emails_clicked) as emails_clicked,
-        SUM(am.conversions) as conversions,
-        CASE 
-          WHEN SUM(am.emails_sent) > 0 
-          THEN ROUND((SUM(am.emails_opened)::numeric / SUM(am.emails_sent)::numeric * 100), 1)
-          ELSE 0 
-        END as open_rate
-      FROM analytics_metrics am
-      JOIN campaigns c ON am.campaign_id = c.id
-      GROUP BY c.id, c.name
-      ORDER BY c.id
-    `);
-    
-    res.json({
-      overall: overallResult.rows[0],
-      campaigns: perCampaignResult.rows
-    });
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching analytics:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });
@@ -746,42 +712,16 @@ app.get('/api/analytics/:campaignId', async (req, res) => {
     
     const result = await pool.query(`
       SELECT 
-        metric_date,
-        emails_sent,
-        sms_sent,
-        emails_opened,
-        emails_clicked,
+        id, campaign_id, metric_date,
+        emails_sent, emails_opened, emails_clicked,
+        sms_sent, COALESCE(sms_replied, 0) as sms_replied,
         conversions
       FROM analytics_metrics
       WHERE campaign_id = $1
       ORDER BY metric_date ASC
     `, [parseInt(campaignId)]);
     
-    const labels = result.rows.map(r => r.metric_date.toISOString().split('T')[0]);
-    const datasets = [
-      {
-        label: 'Emails Sent',
-        data: result.rows.map(r => r.emails_sent)
-      },
-      {
-        label: 'SMS Sent',
-        data: result.rows.map(r => r.sms_sent)
-      },
-      {
-        label: 'Opened',
-        data: result.rows.map(r => r.emails_opened)
-      },
-      {
-        label: 'Clicked',
-        data: result.rows.map(r => r.emails_clicked)
-      },
-      {
-        label: 'Conversions',
-        data: result.rows.map(r => r.conversions)
-      }
-    ];
-    
-    res.json({ labels, datasets, raw: result.rows });
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching campaign analytics:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });
