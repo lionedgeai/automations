@@ -39,7 +39,7 @@ export default function PatientModal({ patient, onClose }: PatientModalProps) {
           {/* Patient Info */}
           <div>
             <h3 className="text-lg font-semibold text-white mb-3">Patient Information</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-sm text-slate-400">Email</p>
                 <p className="text-slate-100 font-medium">{patient.email}</p>
@@ -49,14 +49,23 @@ export default function PatientModal({ patient, onClose }: PatientModalProps) {
                 <p className="text-slate-100 font-medium">{patient.phone}</p>
               </div>
               <div>
+                <p className="text-sm text-slate-400">Gender / Age</p>
+                <p className="text-slate-100 font-medium">
+                  {patient.gender || '—'}
+                  {patient.date_of_birth ? `, ${Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / 31557600000)}y` : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">City</p>
+                <p className="text-slate-100 font-medium">{patient.city ? `${patient.city}, ${patient.state}` : '—'}</p>
+              </div>
+              <div>
                 <p className="text-sm text-slate-400">Procedure Interest</p>
                 <p className="text-slate-100 font-medium">{patient.procedure_interest}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Last Visit</p>
-                <p className="text-slate-100 font-medium">
-                  {new Date(patient.last_visit_date).toLocaleDateString()}
-                </p>
+                <p className="text-sm text-slate-400">Insurance</p>
+                <p className="text-slate-100 font-medium">{patient.insurance_provider || '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-400">Engagement Score</p>
@@ -67,6 +76,26 @@ export default function PatientModal({ patient, onClose }: PatientModalProps) {
               <div>
                 <p className="text-sm text-slate-400">Preferred Channel</p>
                 <p className="text-slate-100 font-medium capitalize">{patient.preferred_channel}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Lead Source</p>
+                <p className="text-slate-100 font-medium">{patient.lead_source || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Appointment Status</p>
+                <p className="text-slate-100 font-medium capitalize">{(patient.appointment_status || 'none').replace(/_/g, ' ')}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Last Contacted</p>
+                <p className="text-slate-100 font-medium">
+                  {patient.last_contacted ? new Date(patient.last_contacted).toLocaleDateString() : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Lifetime Value</p>
+                <p className="text-slate-100 font-medium">
+                  {patient.lifetime_value != null ? `$${Number(patient.lifetime_value).toLocaleString()}` : '—'}
+                </p>
               </div>
             </div>
           </div>

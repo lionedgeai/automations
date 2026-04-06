@@ -59,6 +59,12 @@ export default function CampaignsPage() {
   const [patientResults, setPatientResults] = useState<any[]>([]);
   const [searchingPatients, setSearchingPatients] = useState(false);
   const [bulkEmail, setBulkEmail] = useState('');
+  // AI patient targeting for campaign creation
+  const [targetingQuery, setTargetingQuery] = useState('');
+  const [targetingPatients, setTargetingPatients] = useState<any[]>([]);
+  const [targetingExplanation, setTargetingExplanation] = useState('');
+  const [targetingLoading, setTargetingLoading] = useState(false);
+  const [selectedPatientIds, setSelectedPatientIds] = useState<Set<number>>(new Set());
 
   async function handleDeleteCampaign(e: React.MouseEvent, campaignId: number) {
     e.stopPropagation();
@@ -66,6 +72,48 @@ export default function CampaignsPage() {
     await deleteCampaign(campaignId);
     setCampaigns(campaigns.filter(c => c.id !== campaignId));
   }
+
+  const handleTargetPatients = async () => {
+    const query = targetingQuery.trim() || promptText.trim();
+    if (!query) return;
+    setTargetingLoading(true);
+    try {
+      const res = await fetch('http://localhost:3001/api/patients/ai-filter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      if (!res.ok) throw new Error('Filter failed');
+      const data = await res.json();
+      setTargetingPatients(data.patients || []);
+      setTargetingExplanation(data.explanation || '');
+      // Auto-select all matched patients
+      setSelectedPatientIds(new Set((data.patients || []).map((p: any) => p.id)));
+    } catch (err) {
+      console.error('Patient targeting error:', err);
+      setTargetingPatients([]);
+      setTargetingExplanation('Error filtering patients');
+    } finally {
+      setTargetingLoading(false);
+    }
+  };
+
+  const togglePatientSelection = (patientId: number) => {
+    setSelectedPatientIds(prev => {
+      const next = new Set(prev);
+      if (next.has(patientId)) next.delete(patientId);
+      else next.add(patientId);
+      return next;
+    });
+  };
+
+  const toggleAllPatients = () => {
+    if (selectedPatientIds.size === targetingPatients.length) {
+      setSelectedPatientIds(new Set());
+    } else {
+      setSelectedPatientIds(new Set(targetingPatients.map((p: any) => p.id)));
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -110,8 +158,9 @@ export default function CampaignsPage() {
 
     setShowAgentPanel(true);
 
-    // Fire API call immediately (runs in background)
-    const apiPromise = createCampaign(promptText, selectedTemplateId);
+    // Fire API call immediately with selected patient IDs (runs in background)
+    const patientIdsArray = selectedPatientIds.size > 0 ? Array.from(selectedPatientIds) : undefined;
+    const apiPromise = createCampaign(promptText, selectedTemplateId, patientIdsArray);
 
     // Animate agent activity in parallel
     const activities: AgentActivity[] = [
@@ -399,15 +448,143 @@ export default function CampaignsPage() {
                 ))}
               </select>
             </div>
-
-            <button
-              onClick={handleCreateCampaign}
-              disabled={!promptText.trim()}
-              className="mt-6 px-8 py-3 bg-primary hover:bg-primary-dark disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-lg transition-colors"
-            >
-              🚀 Launch Campaign
-            </button>
           </div>
+
+          {/* Patient Targeting Section */}
+          <div className="card mb-6">
+            <h2 className="text-xl font-semibold text-white mb-3">
+              🎯 Target Patients
+            </h2>
+            <p className="text-sm text-slate-400 mb-3">
+              Use AI to find the right patients for this campaign, or launch without targeting to use the campaign description.
+            </p>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={targetingQuery}
+                onChange={(e) => setTargetingQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleTargetPatients()}
+                placeholder="e.g., 'female patients over 50 with cataract interest and Medicare'"
+                className="flex-1 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button
+                onClick={handleTargetPatients}
+                disabled={targetingLoading}
+                className="px-5 py-2.5 bg-primary hover:bg-primary-dark disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+              >
+                {targetingLoading ? '⏳ Searching...' : '🔍 Find Patients'}
+              </button>
+            </div>
+
+            {/* Example targeting queries */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {['Female LASIK patients under 45', 'High-value cataract patients with Medicare', 'Patients in Los Angeles with consultation done', 'All patients from Google Ads'].map(q => (
+                <button
+                  key={q}
+                  onClick={() => { setTargetingQuery(q); }}
+                  className="px-3 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-full border border-slate-700 transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+
+            {/* Patient results preview */}
+            {targetingPatients.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-white">
+                      {selectedPatientIds.size} of {targetingPatients.length} patients selected
+                    </span>
+                    <button
+                      onClick={toggleAllPatients}
+                      className="text-xs text-primary hover:text-primary-light transition-colors"
+                    >
+                      {selectedPatientIds.size === targetingPatients.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                  {targetingExplanation && (
+                    <span className="text-xs text-slate-500 italic">{targetingExplanation}</span>
+                  )}
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-700">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-800 sticky top-0">
+                      <tr className="text-left text-slate-400 text-xs uppercase">
+                        <th className="py-2 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedPatientIds.size === targetingPatients.length}
+                            onChange={toggleAllPatients}
+                            className="accent-[#006eb6] rounded"
+                          />
+                        </th>
+                        <th className="py-2 px-3">Name</th>
+                        <th className="py-2 px-3">Age</th>
+                        <th className="py-2 px-3">City</th>
+                        <th className="py-2 px-3">Procedure</th>
+                        <th className="py-2 px-3">Engagement</th>
+                        <th className="py-2 px-3">Insurance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {targetingPatients.map((p: any) => {
+                        const age = p.date_of_birth
+                          ? Math.floor((Date.now() - new Date(p.date_of_birth).getTime()) / 31557600000)
+                          : null;
+                        return (
+                          <tr
+                            key={p.id}
+                            onClick={() => togglePatientSelection(p.id)}
+                            className={`border-t border-slate-700/50 cursor-pointer transition-colors ${
+                              selectedPatientIds.has(p.id) ? 'bg-primary/10' : 'hover:bg-slate-800/50'
+                            }`}
+                          >
+                            <td className="py-2 px-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedPatientIds.has(p.id)}
+                                onChange={() => togglePatientSelection(p.id)}
+                                className="accent-[#006eb6] rounded"
+                              />
+                            </td>
+                            <td className="py-2 px-3 text-white font-medium">{p.first_name} {p.last_name}</td>
+                            <td className="py-2 px-3 text-slate-400">{age ?? '—'}</td>
+                            <td className="py-2 px-3 text-slate-400">{p.city || '—'}</td>
+                            <td className="py-2 px-3 text-slate-400">{p.procedure_interest}</td>
+                            <td className="py-2 px-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                p.engagement_score >= 80 ? 'bg-green-900/40 text-green-400' :
+                                p.engagement_score >= 50 ? 'bg-yellow-900/40 text-yellow-400' :
+                                'bg-red-900/40 text-red-400'
+                              }`}>
+                                {p.engagement_score}%
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-slate-400 text-xs">{p.insurance_provider || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {targetingExplanation && targetingPatients.length === 0 && !targetingLoading && (
+              <p className="mt-3 text-sm text-yellow-400">⚠️ No patients matched your filter. Try a broader query.</p>
+            )}
+          </div>
+
+          <button
+            onClick={handleCreateCampaign}
+            disabled={!promptText.trim()}
+            className="mb-6 px-8 py-3 bg-primary hover:bg-primary-dark disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-lg transition-colors"
+          >
+            🚀 Launch Campaign{selectedPatientIds.size > 0 ? ` (${selectedPatientIds.size} patients)` : ''}
+          </button>
 
           {/* Agent Activity Panel */}
           {showAgentPanel && (

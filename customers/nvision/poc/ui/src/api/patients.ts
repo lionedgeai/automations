@@ -3,6 +3,13 @@ import { mockPatients } from './mockData';
 
 const API_BASE = 'http://localhost:3001/api';
 
+export interface AIFilterResult {
+  patients: Patient[];
+  explanation: string;
+  count: number;
+  query: string;
+}
+
 export async function getPatients(filters?: PatientsFilter): Promise<Patient[]> {
   try {
     // Build query params
@@ -51,6 +58,21 @@ export async function getPatients(filters?: PatientsFilter): Promise<Patient[]> 
     
     return filtered;
   }
+}
+
+export async function aiFilterPatients(query: string): Promise<AIFilterResult> {
+  const response = await fetch(`${API_BASE}/patients/ai-filter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ message: 'AI filter failed' }));
+    throw new Error(err.message || 'AI filter failed');
+  }
+
+  return response.json();
 }
 
 export async function getPatient(id: number): Promise<Patient | null> {

@@ -44,13 +44,14 @@ export async function getCampaign(id: number): Promise<Campaign> {
 
 export async function createCampaign(
   prompt_text: string,
-  template_id?: number
+  template_id?: number,
+  patient_ids?: number[]
 ): Promise<Campaign> {
   try {
     const response = await fetch(`${API_BASE}/campaigns`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt_text, template_id }),
+      body: JSON.stringify({ prompt_text, template_id, patient_ids }),
     });
     if (!response.ok) throw new Error('API not ready');
     return await response.json();

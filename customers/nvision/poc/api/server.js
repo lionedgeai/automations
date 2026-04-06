@@ -193,6 +193,243 @@ app.get('/api/patients', async (req, res) => {
   }
 });
 
+// ============ AI Patient Filter ============
+
+app.post('/api/patients/ai-filter', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || !query.trim()) {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    const { logAIEvent } = require('./ai/logger');
+    logAIEvent({ provider: 'system', operation: 'ai-filter', status: 'start', detail: `Query: "${query}"` });
+
+    const ai = getAIProvider();
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get distinct values for context
+    const distinctVals = await pool.query(`
+      SELECT 
+        array_agg(DISTINCT city) FILTER (WHERE city IS NOT NULL) as cities,
+        array_agg(DISTINCT insurance_provider) FILTER (WHERE insurance_provider IS NOT NULL) as insurers,
+        array_agg(DISTINCT lead_source) FILTER (WHERE lead_source IS NOT NULL) as sources,
+        array_agg(DISTINCT appointment_status) FILTER (WHERE appointment_status IS NOT NULL) as statuses
+      FROM patients
+    `);
+    const meta = distinctVals.rows[0];
+
+    const systemPrompt = `You are an AI assistant for NVISION Eye Centers patient database.
+Convert natural language queries into SQL WHERE clauses for the patients table.
+
+Available columns:
+- first_name VARCHAR, last_name VARCHAR, email VARCHAR, phone VARCHAR
+- procedure_interest VARCHAR ('LASIK', 'Cataract', 'Premium Lens')
+- engagement_score INT (0-100; high=70+, medium=40-69, low=<40)
+- preferred_channel VARCHAR ('email', 'sms', 'both')
+- date_of_birth DATE (use AGE() or EXTRACT for age calculations)
+- gender VARCHAR ('Male', 'Female')
+- city VARCHAR (cities: ${(meta.cities || []).join(', ')})
+- state VARCHAR (2-letter code, all 'CA')
+- insurance_provider VARCHAR (insurers: ${(meta.insurers || []).join(', ')})
+- lead_source VARCHAR (sources: ${(meta.sources || []).join(', ')})
+- appointment_status VARCHAR (statuses: ${(meta.statuses || []).join(', ')})
+- last_contacted DATE
+- lifetime_value NUMERIC (in dollars)
+- last_visit_date DATE
+- consultation_notes TEXT, call_recording_summary TEXT
+
+Today's date: ${today}
+
+Return ONLY valid JSON:
+{
+  "where_clause": "SQL WHERE clause (without 'WHERE' keyword). Use $1, $2, etc for parameters.",
+  "params": ["array of parameter values"],
+  "explanation": "brief human-readable explanation of what was filtered",
+  "sort": "ORDER BY clause (without 'ORDER BY' keyword), default: engagement_score DESC"
+}
+
+Examples:
+- "female lasik patients in LA" → {"where_clause": "gender = $1 AND procedure_interest = $2 AND city = $3", "params": ["Female", "LASIK", "Los Angeles"], "explanation": "Female LASIK patients in Los Angeles", "sort": "engagement_score DESC"}
+- "high engagement patients over 60" → {"where_clause": "engagement_score >= $1 AND EXTRACT(YEAR FROM AGE(date_of_birth)) >= $2", "params": [70, 60], "explanation": "High engagement patients over 60 years old", "sort": "engagement_score DESC"}
+- "patients with Medicare" → {"where_clause": "insurance_provider ILIKE $1", "params": ["%Medicare%"], "explanation": "Patients with Medicare insurance", "sort": "last_name ASC"}`;
+
+    let filterResult;
+    try {
+      // Try real AI provider
+      if (typeof ai._complete === 'function') {
+        const raw = await ai._complete(systemPrompt, query, 512);
+        const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        filterResult = JSON.parse(cleaned);
+      } else {
+        // Mock fallback: keyword-based parsing
+        filterResult = mockParsePatientFilter(query);
+      }
+    } catch (aiErr) {
+      console.warn('[AI Filter] AI call failed, using mock:', aiErr.message);
+      filterResult = mockParsePatientFilter(query);
+    }
+
+    const { where_clause, params, explanation, sort } = filterResult;
+    const sql = `SELECT * FROM patients WHERE ${where_clause || '1=1'} ORDER BY ${sort || 'engagement_score DESC'}`;
+    
+    console.log('[AI Filter] SQL:', sql, 'Params:', params);
+    const result = await pool.query(sql, params || []);
+
+    logAIEvent({ 
+      provider: ai.name || 'mock', operation: 'ai-filter', status: 'success', 
+      detail: `"${query}" → ${result.rows.length} results`,
+      output: { explanation, count: result.rows.length, sql_preview: where_clause }
+    });
+
+    res.json({
+      patients: result.rows,
+      explanation,
+      count: result.rows.length,
+      query,
+    });
+  } catch (error) {
+    console.error('Error in AI filter:', error);
+    const { logAIEvent } = require('./ai/logger');
+    logAIEvent({ provider: 'system', operation: 'ai-filter', status: 'error', detail: error.message });
+    res.status(500).json({ error: 'AI filter failed', message: error.message });
+  }
+});
+
+// Mock patient filter parser (keyword-based fallback)
+function mockParsePatientFilter(query) {
+  const lower = query.toLowerCase();
+  const conditions = [];
+  const params = [];
+  let paramCount = 0;
+
+  // Gender
+  if (lower.includes('female') || lower.includes('women')) {
+    conditions.push(`gender = $${++paramCount}`);
+    params.push('Female');
+  } else if (lower.includes('male') || lower.includes('men')) {
+    conditions.push(`gender = $${++paramCount}`);
+    params.push('Male');
+  }
+
+  // Procedure
+  if (lower.includes('lasik')) {
+    conditions.push(`procedure_interest = $${++paramCount}`);
+    params.push('LASIK');
+  } else if (lower.includes('cataract')) {
+    conditions.push(`procedure_interest = $${++paramCount}`);
+    params.push('Cataract');
+  } else if (lower.includes('premium') || lower.includes('lens')) {
+    conditions.push(`procedure_interest = $${++paramCount}`);
+    params.push('Premium Lens');
+  }
+
+  // Engagement
+  if (lower.includes('high engagement') || lower.includes('highly engaged')) {
+    conditions.push(`engagement_score >= $${++paramCount}`);
+    params.push(70);
+  } else if (lower.includes('low engagement')) {
+    conditions.push(`engagement_score < $${++paramCount}`);
+    params.push(40);
+  }
+
+  // Age
+  const ageOverMatch = lower.match(/over (\d+)|older than (\d+)|above (\d+)/);
+  if (ageOverMatch) {
+    const age = parseInt(ageOverMatch[1] || ageOverMatch[2] || ageOverMatch[3]);
+    conditions.push(`EXTRACT(YEAR FROM AGE(date_of_birth)) >= $${++paramCount}`);
+    params.push(age);
+  }
+  const ageUnderMatch = lower.match(/under (\d+)|younger than (\d+)|below (\d+)/);
+  if (ageUnderMatch) {
+    const age = parseInt(ageUnderMatch[1] || ageUnderMatch[2] || ageUnderMatch[3]);
+    conditions.push(`EXTRACT(YEAR FROM AGE(date_of_birth)) < $${++paramCount}`);
+    params.push(age);
+  }
+
+  // City
+  const cities = ['los angeles', 'san diego', 'san francisco', 'irvine', 'pasadena', 'long beach', 'santa monica', 'beverly hills', 'newport beach', 'orange', 'riverside', 'anaheim', 'glendale', 'burbank', 'torrance', 'san jose', 'sacramento', 'berkeley', 'santa barbara', 'ventura', 'bakersfield', 'fresno', 'laguna beach', 'palm springs', 'marina del rey', 'mammoth lakes'];
+  for (const city of cities) {
+    if (lower.includes(city)) {
+      conditions.push(`LOWER(city) = $${++paramCount}`);
+      params.push(city);
+      break;
+    }
+  }
+  // Short aliases
+  if (lower.includes(' la ') || lower.includes(' la,') || lower.endsWith(' la')) {
+    conditions.push(`city = $${++paramCount}`);
+    params.push('Los Angeles');
+  } else if (lower.includes(' sf ') || lower.includes(' sf,') || lower.endsWith(' sf')) {
+    conditions.push(`city = $${++paramCount}`);
+    params.push('San Francisco');
+  } else if (lower.includes(' sd ') || lower.includes(' sd,') || lower.endsWith(' sd')) {
+    conditions.push(`city = $${++paramCount}`);
+    params.push('San Diego');
+  }
+
+  // Insurance
+  if (lower.includes('medicare')) {
+    conditions.push(`insurance_provider ILIKE $${++paramCount}`);
+    params.push('%Medicare%');
+  } else if (lower.includes('kaiser')) {
+    conditions.push(`insurance_provider ILIKE $${++paramCount}`);
+    params.push('%Kaiser%');
+  } else if (lower.includes('aetna')) {
+    conditions.push(`insurance_provider ILIKE $${++paramCount}`);
+    params.push('%Aetna%');
+  } else if (lower.includes('blue cross') || lower.includes('blue shield')) {
+    conditions.push(`insurance_provider ILIKE $${++paramCount}`);
+    params.push('%Blue%');
+  }
+
+  // Lead source
+  if (lower.includes('referral')) {
+    conditions.push(`lead_source ILIKE $${++paramCount}`);
+    params.push('%Referral%');
+  } else if (lower.includes('google')) {
+    conditions.push(`lead_source ILIKE $${++paramCount}`);
+    params.push('%Google%');
+  } else if (lower.includes('social') || lower.includes('facebook') || lower.includes('instagram')) {
+    conditions.push(`lead_source ILIKE $${++paramCount}`);
+    params.push('%Facebook%');
+  }
+
+  // Appointment status
+  if (lower.includes('scheduled') || lower.includes('booked')) {
+    conditions.push(`appointment_status = $${++paramCount}`);
+    params.push('procedure_scheduled');
+  } else if (lower.includes('no show') || lower.includes('no-show')) {
+    conditions.push(`appointment_status = $${++paramCount}`);
+    params.push('no_show');
+  } else if (lower.includes('follow up') || lower.includes('follow-up')) {
+    conditions.push(`appointment_status = $${++paramCount}`);
+    params.push('follow_up_scheduled');
+  }
+
+  // Lifetime value
+  if (lower.includes('high value') || lower.includes('high ltv') || lower.includes('valuable')) {
+    conditions.push(`lifetime_value >= $${++paramCount}`);
+    params.push(2000);
+  }
+
+  // Channel
+  if (lower.includes('email only') || (lower.includes('email') && !lower.includes('sms'))) {
+    conditions.push(`preferred_channel = $${++paramCount}`);
+    params.push('email');
+  } else if (lower.includes('sms only') || (lower.includes('sms') && !lower.includes('email'))) {
+    conditions.push(`preferred_channel = $${++paramCount}`);
+    params.push('sms');
+  }
+
+  const where_clause = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
+  const explanation = conditions.length > 0 
+    ? `Filtered patients matching: ${query}` 
+    : `Showing all patients (no specific filters matched for: "${query}")`;
+
+  return { where_clause, params, explanation, sort: 'engagement_score DESC' };
+}
+
 app.get('/api/patients/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -493,7 +730,7 @@ app.delete('/api/campaigns/:id/recipients', async (req, res) => {
 app.post('/api/campaigns', async (req, res) => {
   const client = await pool.connect();
   try {
-    const { prompt_text, template_id } = req.body;
+    const { prompt_text, template_id, patient_ids } = req.body;
     
     if (!prompt_text) {
       return res.status(400).json({ error: 'prompt_text is required' });
@@ -549,9 +786,27 @@ app.post('/api/campaigns', async (req, res) => {
       VALUES ($1, 'Data Analyst', 'Querying Salesforce for matching patients...', 'running', $2)
     `, [campaignId, new Date(baseTime.getTime())]);
     
-    const patientQuery = buildPatientQuery(parsedParams);
-    const patientsResult = await client.query(patientQuery.text, patientQuery.values);
-    const matchedPatients = patientsResult.rows;
+    let matchedPatients;
+    if (patient_ids && Array.isArray(patient_ids) && patient_ids.length > 0) {
+      // Use pre-selected patient IDs from the UI preview
+      const placeholders = patient_ids.map((_, i) => `$${i + 1}`).join(',');
+      const patientsResult = await client.query(
+        `SELECT * FROM patients WHERE id IN (${placeholders}) ORDER BY engagement_score DESC`,
+        patient_ids.map(id => parseInt(id))
+      );
+      matchedPatients = patientsResult.rows;
+    } else {
+      // Fallback: use AI filter on prompt text for patient targeting
+      let filterResult;
+      try {
+        filterResult = mockParsePatientFilter(prompt_text);
+      } catch (e) {
+        filterResult = { where_clause: '1=1', params: [], sort: 'engagement_score DESC' };
+      }
+      const sql = `SELECT * FROM patients WHERE ${filterResult.where_clause} ORDER BY ${filterResult.sort} LIMIT 20`;
+      const patientsResult = await client.query(sql, filterResult.params);
+      matchedPatients = patientsResult.rows;
+    }
     
     await client.query(`
       INSERT INTO agent_activity_log (campaign_id, agent_name, activity_message, status, created_at)

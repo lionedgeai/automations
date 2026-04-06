@@ -29,6 +29,15 @@ CREATE TABLE patients (
   call_recording_summary TEXT,
   engagement_score INT CHECK (engagement_score >= 0 AND engagement_score <= 100),
   preferred_channel VARCHAR(10) CHECK (preferred_channel IN ('email', 'sms', 'both')),
+  date_of_birth DATE,
+  gender VARCHAR(10),
+  city VARCHAR(80),
+  state VARCHAR(2),
+  insurance_provider VARCHAR(80),
+  lead_source VARCHAR(50),
+  appointment_status VARCHAR(30) DEFAULT 'none',
+  last_contacted DATE,
+  lifetime_value NUMERIC(10,2) DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -36,6 +45,11 @@ CREATE INDEX idx_patients_salesforce_id ON patients(salesforce_id);
 CREATE INDEX idx_patients_procedure ON patients(procedure_interest);
 CREATE INDEX idx_patients_engagement ON patients(engagement_score);
 CREATE INDEX idx_patients_channel ON patients(preferred_channel);
+CREATE INDEX idx_patients_city ON patients(city);
+CREATE INDEX idx_patients_gender ON patients(gender);
+CREATE INDEX idx_patients_insurance ON patients(insurance_provider);
+CREATE INDEX idx_patients_lead_source ON patients(lead_source);
+CREATE INDEX idx_patients_appointment ON patients(appointment_status);
 
 -- ===========================================================================
 -- CAMPAIGN TEMPLATES TABLE

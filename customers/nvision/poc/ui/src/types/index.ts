@@ -11,6 +11,15 @@ export interface Patient {
   call_recording_summary: string;
   engagement_score: number;
   preferred_channel: 'email' | 'sms' | 'both';
+  date_of_birth: string;
+  gender: string;
+  city: string;
+  state: string;
+  insurance_provider: string;
+  lead_source: string;
+  appointment_status: string;
+  last_contacted: string;
+  lifetime_value: number;
   created_at: string;
 }
 
@@ -116,4 +125,12 @@ export interface PatientsFilter {
   min_engagement_score?: number;
   preferred_channel?: string;
   search?: string;
+  gender?: string;
+  city?: string;
+  insurance_provider?: string;
+  lead_source?: string;
+  appointment_status?: string;
+  min_age?: number;
+  max_age?: number;
+  min_lifetime_value?: number;
 }
