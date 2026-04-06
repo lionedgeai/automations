@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getAIStatus, testAIConnection, updateAIConfig } from '../api/settings';
+import { getAIStatus, testAIConnection, testResendConnection, updateAIConfig } from '../api/settings';
 import type { AIStatus } from '../api/settings';
 
 export default function SettingsPage() {
@@ -7,6 +7,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingResend, setTestingResend] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [provider, setProvider] = useState('mock');
@@ -16,6 +17,8 @@ export default function SettingsPage() {
   const [openaiModel, setOpenaiModel] = useState('gpt-4o');
   const [githubToken, setGithubToken] = useState('');
   const [githubModel, setGithubModel] = useState('openai/gpt-4o');
+  const [resendKey, setResendKey] = useState('');
+  const [resendFrom, setResendFrom] = useState('NVISION Eye Centers <onboarding@resend.dev>');
 
   useEffect(() => {
     async function load() {
@@ -26,6 +29,7 @@ export default function SettingsPage() {
         setAnthropicModel(s.models.anthropic);
         setOpenaiModel(s.models.openai);
         if (s.models.github) setGithubModel(s.models.github);
+        if (s.resend_from) setResendFrom(s.resend_from);
       } catch {
         console.log('Could not load AI status');
       } finally {
@@ -46,6 +50,8 @@ export default function SettingsPage() {
       if (openaiModel) config.openai_model = openaiModel;
       if (githubToken) config.github_token = githubToken;
       if (githubModel) config.github_model = githubModel;
+      if (resendKey) config.resend_api_key = resendKey;
+      if (resendFrom) config.resend_from = resendFrom;
 
       const updated = await updateAIConfig(config);
       setStatus(updated);
@@ -83,7 +89,7 @@ export default function SettingsPage() {
               </span>
             </div>
             {status.configured.anthropic && (
-              <span className="px-2 py-0.5 text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded">
+              <span className="px-2 py-0.5 text-xs bg-primary/20 text-primary-light border border-primary/30 rounded">
                 Anthropic ✓
               </span>
             )}
@@ -95,6 +101,11 @@ export default function SettingsPage() {
             {status.configured.github && (
               <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded">
                 GitHub ✓
+              </span>
+            )}
+            {status.configured.resend && (
+              <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded">
+                Resend ✓
               </span>
             )}
           </div>
@@ -116,7 +127,7 @@ export default function SettingsPage() {
               key={opt.value}
               className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
                 provider === opt.value
-                  ? 'border-indigo-500 bg-indigo-500/10'
+                  ? 'border-primary bg-primary/10'
                   : 'border-slate-700 hover:border-slate-600'
               }`}
             >
@@ -126,7 +137,7 @@ export default function SettingsPage() {
                 value={opt.value}
                 checked={provider === opt.value}
                 onChange={() => setProvider(opt.value)}
-                className="mt-1 accent-indigo-500"
+                className="mt-1 accent-[#006eb6]"
               />
               <div>
                 <span className="text-white font-medium">{opt.label}</span>
@@ -147,7 +158,7 @@ export default function SettingsPage() {
                 value={anthropicKey}
                 onChange={(e) => setAnthropicKey(e.target.value)}
                 placeholder={status?.configured.anthropic ? '••••••••••• (already set)' : 'sk-ant-api03-...'}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
@@ -155,7 +166,7 @@ export default function SettingsPage() {
               <select
                 value={anthropicModel}
                 onChange={(e) => setAnthropicModel(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Recommended)</option>
                 <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Faster/Cheaper)</option>
@@ -176,7 +187,7 @@ export default function SettingsPage() {
                 value={githubToken}
                 onChange={(e) => setGithubToken(e.target.value)}
                 placeholder={status?.configured.github ? '••••••••••• (already set)' : 'ghp_... or github_pat_...'}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <p className="text-xs text-slate-500 mt-1">Needs <code className="bg-slate-800 px-1 rounded">models:read</code> scope. Get one at github.com/settings/tokens</p>
             </div>
@@ -185,7 +196,7 @@ export default function SettingsPage() {
               <select
                 value={githubModel}
                 onChange={(e) => setGithubModel(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="openai/gpt-4o">GPT-4o (Recommended)</option>
                 <option value="openai/gpt-4o-mini">GPT-4o Mini (Faster)</option>
@@ -207,7 +218,7 @@ export default function SettingsPage() {
                 value={openaiKey}
                 onChange={(e) => setOpenaiKey(e.target.value)}
                 placeholder={status?.configured.openai ? '••••••••••• (already set)' : 'sk-...'}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
@@ -215,7 +226,7 @@ export default function SettingsPage() {
               <select
                 value={openaiModel}
                 onChange={(e) => setOpenaiModel(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="gpt-4o">GPT-4o (Recommended)</option>
                 <option value="gpt-4o-mini">GPT-4o Mini (Faster/Cheaper)</option>
@@ -251,7 +262,7 @@ export default function SettingsPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+            className="px-6 py-2 bg-primary hover:bg-primary disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors"
           >
             {saving ? 'Saving...' : 'Save & Apply'}
           </button>
@@ -262,6 +273,72 @@ export default function SettingsPage() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Email Delivery (Resend) */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-semibold text-white mb-4">📧 Email Delivery (Resend)</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Configure Resend to send real emails from campaigns. Free tier: 100 emails/day.
+        </p>
+
+        <div className="space-y-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700 mb-4">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Resend API Key</label>
+            <input
+              type="password"
+              value={resendKey}
+              onChange={(e) => setResendKey(e.target.value)}
+              placeholder={status?.configured.resend ? '••••••••••• (already set)' : 're_...'}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Get your key at{' '}
+              <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-primary-light hover:underline">
+                resend.com/api-keys
+              </a>
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">From Address</label>
+            <input
+              type="text"
+              value={resendFrom}
+              onChange={(e) => setResendFrom(e.target.value)}
+              placeholder="NVISION Eye Centers <onboarding@resend.dev>"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Use <code className="bg-slate-800 px-1 rounded">onboarding@resend.dev</code> for testing (no domain verification needed)
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={async () => {
+            setTestingResend(true);
+            setMessage(null);
+            try {
+              // Save resend config first
+              if (resendKey) {
+                await updateAIConfig({ resend_api_key: resendKey, resend_from: resendFrom });
+              }
+              const result = await testResendConnection();
+              setMessage({
+                type: result.success ? 'success' : 'error',
+                text: result.message,
+              });
+            } catch {
+              setMessage({ type: 'error', text: 'Could not reach API' });
+            } finally {
+              setTestingResend(false);
+            }
+          }}
+          disabled={testingResend}
+          className="px-6 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-800 text-white rounded-lg font-medium transition-colors"
+        >
+          {testingResend ? 'Testing...' : '📧 Test Resend'}
+        </button>
       </div>
 
       {/* Info */}

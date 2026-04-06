@@ -55,9 +55,91 @@ function createProvider() {
   return new MockAIClient();
 }
 
+function wrapWithLogging(provider) {
+  const { logAIEvent } = require('./logger');
+  const methods = ['parsePrompt', 'generateEmail', 'generateSMS', 'regenerateEmail', 'regenerateSMS'];
+
+  for (const method of methods) {
+    if (typeof provider[method] !== 'function') {
+      continue;
+    }
+
+    const original = provider[method].bind(provider);
+    provider[method] = async (...args) => {
+      let detail = '';
+      if (method === 'parsePrompt') {
+        detail = `Parsing: "${String(args[0] || '').substring(0, 80)}..."`;
+      } else if (method === 'generateEmail') {
+        detail = `Patient: ${args[0]?.first_name || ''} ${args[0]?.last_name || ''} | Tone: ${args[2] || 'default'}`;
+      } else if (method === 'generateSMS') {
+        detail = `Patient: ${args[0]?.first_name || ''} | Tone: ${args[2] || 'default'}`;
+      } else if (method === 'regenerateEmail') {
+        detail = `Regenerating email | Tone: ${args[2] || 'default'}`;
+      } else if (method === 'regenerateSMS') {
+        detail = `Regenerating SMS | Tone: ${args[2] || 'default'}`;
+      }
+
+      logAIEvent({
+        provider: provider.name,
+        operation: method,
+        status: 'start',
+        detail,
+      });
+
+      const start = Date.now();
+      try {
+        const result = await original(...args);
+        const duration_ms = Date.now() - start;
+
+        // Build a preview of the AI output
+        let output = null;
+        if (result && typeof result === 'object') {
+          if (result.subject && result.body) {
+            // Email result
+            output = { subject: result.subject, body: result.body.substring(0, 300) };
+          } else if (result.campaignName) {
+            // parsePrompt result
+            output = { campaign: result.campaignName, procedure: result.procedure, segment: result.segment };
+          } else {
+            output = result;
+          }
+        } else if (typeof result === 'string') {
+          // SMS result
+          output = { sms: result.substring(0, 200) };
+        }
+
+        logAIEvent({
+          provider: provider.name,
+          operation: method,
+          status: 'success',
+          detail,
+          duration_ms,
+          output,
+        });
+
+        return result;
+      } catch (err) {
+        const duration_ms = Date.now() - start;
+
+        logAIEvent({
+          provider: provider.name,
+          operation: method,
+          status: 'error',
+          detail: err.message,
+          duration_ms,
+        });
+
+        throw err;
+      }
+    };
+  }
+
+  return provider;
+}
+
 function getAIProvider() {
   if (!_provider) {
-    _provider = createProvider();
+    _provider = wrapWithLogging(createProvider());
   }
   return _provider;
 }

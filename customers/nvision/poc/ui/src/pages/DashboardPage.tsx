@@ -66,12 +66,23 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-white mb-6">Dashboard</h1>
+      {/* Header with NVISION branding */}
+      <div className="flex items-center gap-4 mb-6">
+        <img
+          src="https://www.nvisioncenters.com/wp-content/uploads/Nvision-Circle-Logo.png"
+          alt="NVISION"
+          className="w-10 h-10 rounded-full bg-white p-0.5"
+        />
+        <div>
+          <h1 className="text-2xl font-bold text-white">Campaign Dashboard</h1>
+          <p className="text-xs text-slate-400">NVISION Eye Centers — AI-Powered Marketing Automation</p>
+        </div>
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-6 mb-6">
-        <div className="card bg-indigo-500/5 border-indigo-500/20">
-          <div className="text-indigo-400 text-3xl mb-2">👥</div>
+        <div className="card bg-primary/5 border-primary/20">
+          <div className="text-primary-light text-3xl mb-2">👥</div>
           <div className="text-3xl font-bold text-white mb-1">
             {stats.total_patients}
           </div>
@@ -232,7 +243,7 @@ export default function DashboardPage() {
         <div className="flex gap-4">
           <Link
             to="/campaigns"
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+            className="px-6 py-3 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium transition-colors"
           >
             + New Campaign
           </Link>

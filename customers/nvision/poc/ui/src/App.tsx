@@ -5,7 +5,9 @@ import PatientsPage from './pages/PatientsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import DeliveryLogPage from './pages/DeliveryLogPage';
+import ArchitecturePage from './pages/ArchitecturePage';
 import SettingsPage from './pages/SettingsPage';
+import AIConsole from './components/AIConsole';
 
 function App() {
   return (
@@ -20,10 +22,12 @@ function App() {
             <Route path="/campaigns/:id" element={<CampaignsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/delivery" element={<DeliveryLogPage />} />
+            <Route path="/architecture" element={<ArchitecturePage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
       </div>
+      <AIConsole />
     </Router>
   );
 }

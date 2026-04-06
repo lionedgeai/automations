@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { getAIProvider } = require('./ai/provider');
+const { sendEmail, testConnection: testResend, resetResendClient } = require('./email/resend');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -56,17 +57,19 @@ app.get('/api/ai/status', (req, res) => {
       openai: !!config.openai.apiKey,
       github: !!config.github.apiKey,
       mock: true,
+      resend: !!process.env.RESEND_API_KEY,
     },
     models: {
       anthropic: config.anthropic.model,
       openai: config.openai.model,
       github: config.github.model,
     },
+    resend_from: process.env.RESEND_FROM || 'NVISION Eye Centers <onboarding@resend.dev>',
   });
 });
 
 app.post('/api/ai/config', (req, res) => {
-  const { provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model, github_token, github_model } = req.body;
+  const { provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model, github_token, github_model, resend_api_key, resend_from } = req.body;
 
   if (provider) process.env.AI_PROVIDER = provider;
   if (anthropic_api_key !== undefined) process.env.ANTHROPIC_API_KEY = anthropic_api_key;
@@ -75,6 +78,8 @@ app.post('/api/ai/config', (req, res) => {
   if (openai_model) process.env.OPENAI_MODEL = openai_model;
   if (github_token !== undefined) process.env.GITHUB_TOKEN = github_token;
   if (github_model) process.env.GITHUB_MODEL = github_model;
+  if (resend_api_key !== undefined) { process.env.RESEND_API_KEY = resend_api_key; resetResendClient(); }
+  if (resend_from) process.env.RESEND_FROM = resend_from;
 
   // Reset provider so next call picks up new config
   const { resetProvider, getProviderConfig } = require('./ai/provider');
@@ -91,12 +96,14 @@ app.post('/api/ai/config', (req, res) => {
       openai: !!config.openai.apiKey,
       github: !!config.github.apiKey,
       mock: true,
+      resend: !!process.env.RESEND_API_KEY,
     },
     models: {
       anthropic: config.anthropic.model,
       openai: config.openai.model,
       github: config.github.model,
     },
+    resend_from: process.env.RESEND_FROM || 'NVISION Eye Centers <onboarding@resend.dev>',
   });
 });
 
@@ -111,6 +118,37 @@ app.post('/api/ai/test', async (req, res) => {
   } catch (err) {
     res.json({ success: false, provider: ai.name, message: err.message });
   }
+});
+
+// SSE stream for real-time AI console
+app.get('/api/ai/console', (req, res) => {
+  const { aiLogger } = require('./ai/logger');
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  const recent = aiLogger.getRecent(50);
+  for (const entry of recent) {
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  }
+
+  const onLog = (entry) => {
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  };
+  aiLogger.on('log', onLog);
+
+  req.on('close', () => {
+    aiLogger.off('log', onLog);
+  });
+});
+
+// GET recent logs (non-streaming fallback)
+app.get('/api/ai/logs', (req, res) => {
+  const { aiLogger } = require('./ai/logger');
+  res.json(aiLogger.getRecent(50));
 });
 
 app.get('/api/patients', async (req, res) => {
@@ -141,7 +179,7 @@ app.get('/api/patients', async (req, res) => {
 
     if (search) {
       paramCount++;
-      query += ` AND (name ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
+      query += ` AND (CONCAT(first_name, ' ', last_name) ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
       params.push(`%${search}%`);
     }
 
@@ -252,6 +290,203 @@ app.get('/api/campaigns/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching campaign:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// ============ Campaign Recipients Management ============
+
+// Get recipients for a campaign (with email_override)
+app.get('/api/campaigns/:id/recipients', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT DISTINCT ON (cr.patient_id)
+        cr.id,
+        cr.patient_id,
+        cr.email_override,
+        cr.cadence_step,
+        cr.channel,
+        cr.status,
+        CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+        p.email as original_email,
+        p.phone,
+        p.procedure_interest,
+        p.engagement_score
+      FROM campaign_recipients cr
+      JOIN patients p ON cr.patient_id = p.id
+      WHERE cr.campaign_id = $1
+      ORDER BY cr.patient_id, cr.cadence_step ASC
+    `, [parseInt(id)]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching campaign recipients:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// Add recipient to campaign
+app.post('/api/campaigns/:id/recipients', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { patient_id, email_override } = req.body;
+    const cid = parseInt(id);
+
+    if (!patient_id) {
+      return res.status(400).json({ error: 'patient_id is required' });
+    }
+
+    // Check patient exists
+    const patientResult = await client.query('SELECT * FROM patients WHERE id = $1', [parseInt(patient_id)]);
+    if (patientResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    // Check not already in campaign
+    const existing = await client.query(
+      'SELECT id FROM campaign_recipients WHERE campaign_id = $1 AND patient_id = $2 LIMIT 1',
+      [cid, parseInt(patient_id)]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Patient already in campaign' });
+    }
+
+    await client.query('BEGIN');
+
+    // Add 4 cadence steps (email, sms, email, sms)
+    const channels = ['email', 'sms', 'email', 'sms'];
+    for (let step = 0; step < channels.length; step++) {
+      await client.query(`
+        INSERT INTO campaign_recipients (campaign_id, patient_id, cadence_step, channel, email_override, status)
+        VALUES ($1, $2, $3, $4, $5, 'pending')
+      `, [cid, parseInt(patient_id), step + 1, channels[step], email_override || null]);
+    }
+
+    await client.query('COMMIT');
+
+    const patient = patientResult.rows[0];
+    res.status(201).json({
+      patient_id: patient.id,
+      patient_name: `${patient.first_name} ${patient.last_name}`,
+      email: patient.email,
+      email_override: email_override || null,
+      message: 'Recipient added with 4 cadence steps',
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error adding recipient:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Update recipient email override
+app.put('/api/campaigns/:id/recipients/:patientId', async (req, res) => {
+  try {
+    const { id, patientId } = req.params;
+    const { email_override } = req.body;
+
+    const result = await pool.query(`
+      UPDATE campaign_recipients
+      SET email_override = $1
+      WHERE campaign_id = $2 AND patient_id = $3
+      RETURNING id
+    `, [email_override || null, parseInt(id), parseInt(patientId)]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Recipient not found in campaign' });
+    }
+
+    res.json({ updated: result.rowCount, email_override: email_override || null });
+  } catch (error) {
+    console.error('Error updating recipient:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// Bulk update all recipients' email override (for demo: "send all to me")
+app.put('/api/campaigns/:id/recipients-override', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email_override } = req.body;
+
+    const result = await pool.query(`
+      UPDATE campaign_recipients
+      SET email_override = $1
+      WHERE campaign_id = $2
+    `, [email_override || null, parseInt(id)]);
+
+    res.json({ updated: result.rowCount, email_override: email_override || null });
+  } catch (error) {
+    console.error('Error bulk updating recipients:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// Remove recipient from campaign
+app.delete('/api/campaigns/:id/recipients/:patientId', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id, patientId } = req.params;
+    const cid = parseInt(id);
+    const pid = parseInt(patientId);
+
+    await client.query('BEGIN');
+    await client.query(`
+      DELETE FROM delivery_log
+      WHERE campaign_recipient_id IN (
+        SELECT id FROM campaign_recipients WHERE campaign_id = $1 AND patient_id = $2
+      )
+    `, [cid, pid]);
+    await client.query(
+      'DELETE FROM campaign_content_variants WHERE campaign_id = $1 AND patient_id = $2',
+      [cid, pid]
+    );
+    const result = await client.query(
+      'DELETE FROM campaign_recipients WHERE campaign_id = $1 AND patient_id = $2 RETURNING id',
+      [cid, pid]
+    );
+    await client.query('COMMIT');
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Recipient not found in campaign' });
+    }
+    res.json({ deleted: result.rowCount });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error removing recipient:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Remove ALL recipients from campaign
+app.delete('/api/campaigns/:id/recipients', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const cid = parseInt(id);
+
+    await client.query('BEGIN');
+    await client.query(`
+      DELETE FROM delivery_log
+      WHERE campaign_recipient_id IN (
+        SELECT id FROM campaign_recipients WHERE campaign_id = $1
+      )
+    `, [cid]);
+    await client.query('DELETE FROM campaign_content_variants WHERE campaign_id = $1', [cid]);
+    const result = await client.query('DELETE FROM campaign_recipients WHERE campaign_id = $1 RETURNING id', [cid]);
+    await client.query('COMMIT');
+
+    res.json({ deleted: result.rowCount });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error removing all recipients:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -700,6 +935,162 @@ app.delete('/api/campaigns/:id', async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// ============ Campaign Send (Resend) ============
+
+app.post('/api/campaigns/:id/send', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const cid = parseInt(id);
+
+    // Verify campaign is approved/active
+    const campaignResult = await client.query('SELECT * FROM campaigns WHERE id = $1', [cid]);
+    if (campaignResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const campaign = campaignResult.rows[0];
+    if (!['approved', 'active'].includes(campaign.status)) {
+      return res.status(400).json({ error: `Campaign must be approved before sending (current: ${campaign.status})` });
+    }
+
+    // Get distinct recipients with their selected email variants
+    const recipientsResult = await client.query(`
+      SELECT DISTINCT ON (cr.patient_id)
+        cr.id as recipient_id,
+        cr.patient_id,
+        cr.email_override,
+        p.first_name,
+        p.last_name,
+        p.email,
+        p.procedure_interest,
+        cv.subject_line,
+        cv.content,
+        cv.tone_label
+      FROM campaign_recipients cr
+      JOIN patients p ON cr.patient_id = p.id
+      LEFT JOIN campaign_content_variants cv
+        ON cv.campaign_id = cr.campaign_id
+        AND cv.patient_id = cr.patient_id
+        AND cv.message_type = 'email'
+        AND cv.is_selected = true
+      WHERE cr.campaign_id = $1
+        AND cr.channel = 'email'
+      ORDER BY cr.patient_id, cr.cadence_step ASC
+    `, [cid]);
+
+    if (recipientsResult.rows.length === 0) {
+      return res.status(400).json({ error: 'No email recipients found for this campaign' });
+    }
+
+    const { logAIEvent } = require('./ai/logger');
+    logAIEvent({
+      provider: 'resend',
+      operation: 'sendCampaign',
+      status: 'start',
+      detail: `Sending campaign "${campaign.name}" to ${recipientsResult.rows.length} recipients`,
+    });
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const row of recipientsResult.rows) {
+      const patientName = `${row.first_name} ${row.last_name}`;
+      const toEmail = row.email_override || row.email;
+      const subject = row.subject_line || `${campaign.name} — Special Offer for You`;
+      const body = row.content || `We have an exciting opportunity for your ${row.procedure_interest || 'eye care'} needs.`;
+
+      try {
+        const result = await sendEmail({
+          to: toEmail,
+          patientName,
+          subject,
+          body,
+          procedureInterest: row.procedure_interest,
+          campaignId: cid,
+          recipientId: row.recipient_id,
+        });
+
+        // Log to delivery_log
+        await client.query(`
+          INSERT INTO delivery_log (campaign_recipient_id, channel, status, sent_at, tracking_id, created_at)
+          VALUES ($1, 'email', 'sent', NOW(), $2, NOW())
+        `, [row.recipient_id, result.emailId]);
+
+        results.push({ patient: patientName, email: toEmail, status: 'sent', emailId: result.emailId });
+        successCount++;
+      } catch (err) {
+        await client.query(`
+          INSERT INTO delivery_log (campaign_recipient_id, channel, status, sent_at, created_at)
+          VALUES ($1, 'email', 'failed', NOW(), NOW())
+        `, [row.recipient_id]);
+
+        results.push({ patient: patientName, email: toEmail, status: 'failed', error: err.message });
+        failCount++;
+      }
+    }
+
+    // Update campaign status
+    await client.query(`
+      UPDATE campaigns SET status = 'active', updated_at = NOW() WHERE id = $1
+    `, [cid]);
+
+    // Log activity
+    await client.query(`
+      INSERT INTO agent_activity_log (campaign_id, agent_name, activity_message, status, created_at)
+      VALUES ($1, 'Email Delivery Agent', $2, 'completed', NOW())
+    `, [cid, `Sent ${successCount} emails (${failCount} failed) via Resend`]);
+
+    logAIEvent({
+      provider: 'resend',
+      operation: 'sendCampaign',
+      status: 'success',
+      detail: `Campaign "${campaign.name}": ${successCount} sent, ${failCount} failed`,
+      output: { successCount, failCount, total: recipientsResult.rows.length },
+    });
+
+    res.json({ success: true, sent: successCount, failed: failCount, results });
+  } catch (error) {
+    console.error('Error sending campaign:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Campaign delivery status
+app.get('/api/campaigns/:id/delivery', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT
+        dl.id,
+        dl.channel,
+        dl.status,
+        dl.sent_at,
+        dl.tracking_id,
+        CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+        p.email,
+        cr.cadence_step
+      FROM delivery_log dl
+      JOIN campaign_recipients cr ON dl.campaign_recipient_id = cr.id
+      JOIN patients p ON cr.patient_id = p.id
+      WHERE cr.campaign_id = $1
+      ORDER BY dl.sent_at DESC
+    `, [parseInt(id)]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching delivery status:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// Test Resend connection
+app.post('/api/email/test', async (req, res) => {
+  const result = await testResend();
+  res.json(result);
 });
 
 // ============ Delivery Log ============

@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>n8n Workflow Trigger - POC</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0f1419;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #1e2835;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            color: #58a6ff;
+            font-size: 20px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card h3 {
+            color: #79c0ff;
+            font-size: 16px;
+            margin-bottom: 12px;
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            color: #c9d1d9;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="url"] {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+
+        .url-config {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .url-config .form-group {
+            flex: 1;
+        }
+
+        .url-preset {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .url-preset button {
+            padding: 6px 12px;
+            font-size: 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #8b949e;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .url-preset button:hover {
+            background: #30363d;
+            color: #e0e0e0;
+        }
+
+        .url-preset button.active {
+            background: #1f6feb;
+            color: #ffffff;
+            border-color: #1f6feb;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #238636;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2ea043;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background: #30363d;
+            color: #6e7681;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            background: #1f6feb;
+        }
+
+        .btn-primary:hover {
+            background: #388bfd;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .result-panel {
+            margin-top: 16px;
+            padding: 16px;
+            background: #0d1117;
+            border-radius: 6px;
+            border-left: 4px solid #30363d;
+        }
+
+        .result-panel.success {
+            border-left-color: #238636;
+        }
+
+        .result-panel.error {
+            border-left-color: #da3633;
+        }
+
+        .result-panel.loading {
+            border-left-color: #f0883e;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #238636;
+            color: #ffffff;
+        }
+
+        .status-error {
+            background: #da3633;
+            color: #ffffff;
+        }
+
+        .status-loading {
+            background: #f0883e;
+            color: #ffffff;
+        }
+
+        .result-meta {
+            display: flex;
+            gap: 20px;
+            margin: 12px 0;
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        .result-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        pre {
+            background: #010409;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #79c0ff;
+            margin-top: 12px;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .history-table th {
+            background: #0d1117;
+            padding: 10px;
+            text-align: left;
+            color: #8b949e;
+            font-weight: 600;
+            border-bottom: 2px solid #30363d;
+        }
+
+        .history-table td {
+            padding: 10px;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .history-table tr:hover {
+            background: #0d1117;
+        }
+
+        .history-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .history-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+            background: #21262d;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #6e7681;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #30363d;
+            border-top-color: #f0883e;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+
+            .history-table {
+                font-size: 11px;
+            }
+
+            .history-table th,
+            .history-table td {
+                padding: 8px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>n8n Workflow Trigger</h1>
+            <p class="subtitle">POC - Custom UI for triggering n8n workflows</p>
+        </header>
+
+        <!-- Configuration Card -->
+        <div class="card">
+            <h2>⚙️ Configuration</h2>
+            <div class="form-group">
+                <label for="webhookUrl">n8n Webhook URL</label>
+                <input type="url" id="webhookUrl" placeholder="http://localhost:5678/webhook/lead-to-sms">
+                <div class="url-preset">
+                    <button type="button" onclick="setWebhookUrl('test')" id="testBtn">Test URL</button>
+                    <button type="button" onclick="setWebhookUrl('prod')" id="prodBtn">Production URL</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trigger Workflow Card -->
+        <div class="card">
+            <h2>🚀 Trigger Workflow</h2>
+            <form id="triggerForm">
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="leadName">Name *</label>
+                        <input type="text" id="leadName" required placeholder="John Doe">
+                    </div>
+                    <div class="form-group">
+                        <label for="leadPhone">Phone *</label>
+                        <input type="tel" id="leadPhone" required placeholder="+1-555-123-4567">
+                    </div>
+                </div>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="leadEmail">Email *</label>
+                        <input type="email" id="leadEmail" required placeholder="john.doe@company.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="leadCompany">Company</label>
+                        <input type="text" id="leadCompany" placeholder="Acme Corp">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" id="submitBtn">Run Workflow</button>
+            </form>
+
+            <!-- Results Panel -->
+            <div id="resultsPanel" style="display: none;">
+                <h3>Execution Results</h3>
+                <div id="resultContent"></div>
+            </div>
+        </div>
+
+        <!-- Execution History Card -->
+        <div class="card">
+            <h2>📊 Execution History</h2>
+            <div class="history-actions">
+                <span id="historyCount" style="color: #8b949e; font-size: 13px;">0 executions</span>
+                <button type="button" onclick="clearHistory()">Clear History</button>
+            </div>
+            <div id="historyContent">
+                <div class="empty-state">No executions yet. Trigger a workflow to see results here.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const STORAGE_KEYS = {
+            webhookUrl: 'n8n_webhook_url',
+            history: 'n8n_execution_history',
+            testUrl: 'n8n_test_url',
+            prodUrl: 'n8n_prod_url'
+        };
+
+        const DEFAULT_URLS = {
+            test: 'http://localhost:5678/webhook/lead-to-sms',
+            prod: 'http://localhost:5678/webhook/lead-to-sms'
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfiguration();
+            loadHistory();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            const webhookUrlInput = document.getElementById('webhookUrl');
+            webhookUrlInput.addEventListener('blur', function() {
+                localStorage.setItem(STORAGE_KEYS.webhookUrl, this.value);
+            });
+
+            document.getElementById('triggerForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                triggerWorkflow();
+            });
+        }
+
+        function loadConfiguration() {
+            const savedUrl = localStorage.getItem(STORAGE_KEYS.webhookUrl);
+            const savedTestUrl = localStorage.getItem(STORAGE_KEYS.testUrl);
+            const savedProdUrl = localStorage.getItem(STORAGE_KEYS.prodUrl);
+
+            if (savedTestUrl) DEFAULT_URLS.test = savedTestUrl;
+            if (savedProdUrl) DEFAULT_URLS.prod = savedProdUrl;
+
+            document.getElementById('webhookUrl').value = savedUrl || DEFAULT_URLS.test;
+        }
+
+        function setWebhookUrl(type) {
+            const webhookUrlInput = document.getElementById('webhookUrl');
+            const currentUrl = webhookUrlInput.value;
+            
+            if (type === 'test') {
+                webhookUrlInput.value = DEFAULT_URLS.test;
+                document.getElementById('testBtn').classList.add('active');
+                document.getElementById('prodBtn').classList.remove('active');
+            } else {
+                webhookUrlInput.value = DEFAULT_URLS.prod;
+                document.getElementById('prodBtn').classList.add('active');
+                document.getElementById('testBtn').classList.remove('active');
+            }
+            
+            localStorage.setItem(STORAGE_KEYS.webhookUrl, webhookUrlInput.value);
+        }
+
+        async function triggerWorkflow() {
+            const webhookUrl = document.getElementById('webhookUrl').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const resultsPanel = document.getElementById('resultsPanel');
+            const resultContent = document.getElementById('resultContent');
+
+            if (!webhookUrl) {
+                alert('Please configure the webhook URL first');
+                return;
+            }
+
+            const leadData = {
+                name: document.getElementById('leadName').value,
+                phone: document.getElementById('leadPhone').value,
+                email: document.getElementById('leadEmail').value,
+                company: document.getElementById('leadCompany').value
+            };
+
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Executing...';
+            resultsPanel.style.display = 'block';
+            resultContent.innerHTML = createResultPanel('loading', 'Workflow executing...', null, 0);
+
+            const startTime = Date.now();
+            let executionRecord = {
+                timestamp: new Date().toISOString(),
+                leadName: leadData.name,
+                status: 'pending',
+                responseTime: 0,
+                statusCode: null,
+                response: null,
+                error: null
+            };
+
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(leadData)
+                });
+
+                const responseTime = Date.now() - startTime;
+                let responseData;
+                
+                const text = await response.text();
+                try {
+                    responseData = text ? JSON.parse(text) : null;
+                } catch (e) {
+                    responseData = text;
+                }
+
+                executionRecord.responseTime = responseTime;
+                executionRecord.statusCode = response.status;
+                executionRecord.status = response.ok ? 'success' : 'error';
+                executionRecord.response = responseData;
+
+                // Display results
+                const resultType = response.ok ? 'success' : 'error';
+                const resultMessage = response.ok ? 
+                    `Workflow executed successfully (${response.status})` : 
+                    `Workflow failed with status ${response.status}`;
+                
+                resultContent.innerHTML = createResultPanel(resultType, resultMessage, responseData, responseTime);
+
+            } catch (error) {
+                const responseTime = Date.now() - startTime;
+                executionRecord.status = 'error';
+                executionRecord.responseTime = responseTime;
+                executionRecord.error = error.message;
+
+                resultContent.innerHTML = createResultPanel('error', 'Failed to connect to n8n', {
+                    error: error.message,
+                    note: 'Make sure n8n is running and the webhook URL is correct'
+                }, responseTime);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Run Workflow';
+                
+                // Save to history
+                saveToHistory(executionRecord);
+                loadHistory();
+            }
+        }
+
+        function createResultPanel(type, message, data, responseTime) {
+            const statusClass = type === 'loading' ? 'status-loading' : (type === 'success' ? 'status-success' : 'status-error');
+            const panelClass = type === 'loading' ? 'loading' : (type === 'success' ? 'success' : 'error');
+            
+            const spinner = type === 'loading' ? '<span class="spinner"></span>' : '';
+            const meta = type !== 'loading' ? `
+                <div class="result-meta">
+                    <span>⏱️ ${responseTime}ms</span>
+                    <span>📅 ${new Date().toLocaleString()}</span>
+                </div>
+            ` : '';
+            
+            const dataDisplay = data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : '';
+            
+            return `
+                <div class="result-panel ${panelClass}">
+                    <div>
+                        <span class="status-badge ${statusClass}">${spinner} ${type.toUpperCase()}</span>
+                    </div>
+                    <p style="margin: 12px 0; color: #c9d1d9;">${message}</p>
+                    ${meta}
+                    ${dataDisplay}
+                </div>
+            `;
+        }
+
+        function saveToHistory(record) {
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || '[]');
+            history.unshift(record);
+            
+            // Keep only last 50 executions
+            if (history.length > 50) {
+                history = history.slice(0, 50);
+            }
+            
+            localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+        }
+
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || '[]');
+            const historyContent = document.getElementById('historyContent');
+            const historyCount = document.getElementById('historyCount');
+            
+            historyCount.textContent = `${history.length} execution${history.length !== 1 ? 's' : ''}`;
+            
+            if (history.length === 0) {
+                historyContent.innerHTML = '<div class="empty-state">No executions yet. Trigger a workflow to see results here.</div>';
+                return;
+            }
+            
+            const tableHTML = `
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Lead Name</th>
+                            <th>Status</th>
+                            <th>Response Time</th>
+                            <th>Code</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${history.map(record => {
+                            const statusBadge = record.status === 'success' ? 
+                                '<span class="status-badge status-success">SUCCESS</span>' :
+                                '<span class="status-badge status-error">ERROR</span>';
+                            
+                            const timestamp = new Date(record.timestamp).toLocaleString();
+                            const responseTime = record.responseTime ? `${record.responseTime}ms` : '-';
+                            const statusCode = record.statusCode || '-';
+                            
+                            return `
+                                <tr>
+                                    <td>${timestamp}</td>
+                                    <td>${record.leadName}</td>
+                                    <td>${statusBadge}</td>
+                                    <td>${responseTime}</td>
+                                    <td>${statusCode}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            historyContent.innerHTML = tableHTML;
+        }
+
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear all execution history?')) {
+                localStorage.removeItem(STORAGE_KEYS.history);
+                loadHistory();
+            }
+        }
+    </script>
+</body>
+</html>

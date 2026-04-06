@@ -95,7 +95,7 @@ export const mockVariants: ContentVariant[] = [
     tone_label: 'Medical/Professional',
     subject_line: 'Your LASIK Consultation Follow-Up',
     content:
-      'Dear Sarah,\n\nThank you for your recent consultation regarding LASIK vision correction. Based on your examination, you are an excellent candidate for this procedure.\n\nWe are pleased to offer a special promotional rate of $500 per eye, available through August 31st, 2026. This represents significant savings while maintaining our commitment to exceptional care and outcomes.\n\nTo schedule your procedure or discuss any questions, please contact our office at your earliest convenience.\n\nSincerely,\nDr. Johnson and the nVision Team',
+      'Dear Sarah,\n\nThank you for your recent consultation regarding LASIK vision correction. Based on your examination, you are an excellent candidate for this procedure.\n\nWe are pleased to offer a special promotional rate of $500 per eye, available through August 31st, 2026. This represents significant savings while maintaining our commitment to exceptional care and outcomes.\n\nTo schedule your procedure or discuss any questions, please contact our office at your earliest convenience.\n\nSincerely,\nDr. Johnson and the NVISION Team',
     is_selected: false,
     created_at: '2026-04-05T14:35:00Z',
   },
@@ -108,7 +108,7 @@ export const mockVariants: ContentVariant[] = [
     tone_label: 'Friendly',
     subject_line: 'Great News About Your LASIK Journey, Sarah!',
     content:
-      'Hi Sarah,\n\nWe loved meeting you at your LASIK consultation! Your eyes are in great shape for the procedure, and we think you\'re going to love your results.\n\nHere\'s some exciting news: we\'re running a special promotion — just $500 per eye through the end of August. It\'s the perfect time to finally say goodbye to glasses and contacts!\n\nReady to take the next step? Give us a call, and we\'ll get you scheduled. We can\'t wait to help you see the world more clearly!\n\nWarm regards,\nThe nVision Team',
+      'Hi Sarah,\n\nWe loved meeting you at your LASIK consultation! Your eyes are in great shape for the procedure, and we think you\'re going to love your results.\n\nHere\'s some exciting news: we\'re running a special promotion — just $500 per eye through the end of August. It\'s the perfect time to finally say goodbye to glasses and contacts!\n\nReady to take the next step? Give us a call, and we\'ll get you scheduled. We can\'t wait to help you see the world more clearly!\n\nWarm regards,\nThe NVISION Team',
     is_selected: true,
     created_at: '2026-04-05T14:35:00Z',
   },
@@ -121,7 +121,7 @@ export const mockVariants: ContentVariant[] = [
     tone_label: 'Empathetic',
     subject_line: 'We Understand Your Vision Concerns, Sarah',
     content:
-      'Dear Sarah,\n\nWe know that considering LASIK is a big decision, and we appreciate you trusting us with your vision care journey.\n\nYou mentioned during your consultation that you\'re tired of the hassle of contacts and glasses. We truly understand how limiting that can feel, and we\'re here to help you achieve the freedom you\'re looking for.\n\nTo make this easier, we\'re offering a special rate of $500 per eye through August 31st. We want to ensure that cost isn\'t a barrier to the vision you deserve.\n\nWhenever you\'re ready to move forward, we\'re here to support you every step of the way.\n\nWith care,\nDr. Johnson and the nVision Team',
+      'Dear Sarah,\n\nWe know that considering LASIK is a big decision, and we appreciate you trusting us with your vision care journey.\n\nYou mentioned during your consultation that you\'re tired of the hassle of contacts and glasses. We truly understand how limiting that can feel, and we\'re here to help you achieve the freedom you\'re looking for.\n\nTo make this easier, we\'re offering a special rate of $500 per eye through August 31st. We want to ensure that cost isn\'t a barrier to the vision you deserve.\n\nWhenever you\'re ready to move forward, we\'re here to support you every step of the way.\n\nWith care,\nDr. Johnson and the NVISION Team',
     is_selected: false,
     created_at: '2026-04-05T14:35:00Z',
   },
@@ -134,7 +134,7 @@ export const mockVariants: ContentVariant[] = [
     tone_label: 'Friendly',
     subject_line: 'Your LASIK Opportunity, David!',
     content:
-      'Hi David,\n\nThanks for coming in to explore LASIK with us! After reviewing your exam, you\'re a perfect candidate for the procedure.\n\nWe have a limited-time offer: $500 per eye through August 31st. This is a great chance to invest in clearer vision at a fantastic price.\n\nLet\'s get you scheduled! Call us anytime, and we\'ll find a time that works for you.\n\nBest,\nThe nVision Team',
+      'Hi David,\n\nThanks for coming in to explore LASIK with us! After reviewing your exam, you\'re a perfect candidate for the procedure.\n\nWe have a limited-time offer: $500 per eye through August 31st. This is a great chance to invest in clearer vision at a fantastic price.\n\nLet\'s get you scheduled! Call us anytime, and we\'ll find a time that works for you.\n\nBest,\nThe NVISION Team',
     is_selected: true,
     created_at: '2026-04-05T14:35:00Z',
   },
@@ -147,7 +147,7 @@ export const mockVariants: ContentVariant[] = [
     tone_label: 'Informative',
     subject_line: 'LASIK Information and Special Pricing',
     content:
-      'Hello Emily,\n\nFollowing your consultation, we wanted to provide you with key information about LASIK:\n\n• Recovery time: Most patients return to normal activities within 24-48 hours\n• Success rate: Over 96% of patients achieve 20/20 vision or better\n• Procedure duration: Approximately 10-15 minutes per eye\n• Current pricing: $500 per eye (through August 31st, 2026)\n\nIf you have any questions or would like to schedule your procedure, please contact our office.\n\nBest regards,\nnVision Surgical Center',
+      'Hello Emily,\n\nFollowing your consultation, we wanted to provide you with key information about LASIK:\n\n• Recovery time: Most patients return to normal activities within 24-48 hours\n• Success rate: Over 96% of patients achieve 20/20 vision or better\n• Procedure duration: Approximately 10-15 minutes per eye\n• Current pricing: $500 per eye (through August 31st, 2026)\n\nIf you have any questions or would like to schedule your procedure, please contact our office.\n\nBest regards,\nNVISION Surgical Center',
     is_selected: true,
     created_at: '2026-04-05T14:35:00Z',
   },

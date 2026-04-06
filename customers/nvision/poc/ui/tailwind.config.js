@@ -8,10 +8,18 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#6366f1',
-          dark: '#4f46e5',
-          light: '#818cf8'
+          DEFAULT: '#006eb6',
+          dark: '#005a94',
+          light: '#3d9fd8'
+        },
+        accent: {
+          DEFAULT: '#eeae18',
+          dark: '#d49a0e',
+          light: '#f5c84d'
         }
+      },
+      fontFamily: {
+        sans: ['Montserrat', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
       }
     },
   },

@@ -162,6 +162,41 @@ if ([int]$tableCount -ge 3) {
     Write-Warn "Some tables may not have been created — check init-demo-db.sql"
 }
 
+# ── Setup n8n owner account ───────────────────────────────
+Write-Step "Configuring n8n owner account"
+$n8nReady = $false
+$waited = 0
+while ($waited -lt 30) {
+    try {
+        $n8nSettings = Invoke-RestMethod -Uri "http://localhost:5678/rest/settings" -TimeoutSec 2 -ErrorAction Stop
+        $n8nReady = $true
+        break
+    } catch {}
+    Start-Sleep -Seconds 2
+    $waited += 2
+    Write-Host "  ... waiting for n8n ($waited s)" -ForegroundColor DarkGray
+}
+
+if ($n8nReady -and $n8nSettings.data.userManagement.showSetupOnFirstLoad) {
+    $n8nBody = @{
+        email     = "demo@nvision.ai"
+        firstName = "Demo"
+        lastName  = "Admin"
+        password  = "DemoAdmin123!"
+    } | ConvertTo-Json
+
+    try {
+        Invoke-RestMethod -Uri "http://localhost:5678/rest/owner/setup" -Method POST -Body $n8nBody -ContentType "application/json" -TimeoutSec 10 | Out-Null
+        Write-Ok "n8n owner created (demo@nvision.ai / DemoAdmin123!)"
+    } catch {
+        Write-Warn "Could not auto-create n8n owner — set up manually at http://localhost:5678"
+    }
+} elseif ($n8nReady) {
+    Write-Ok "n8n owner already configured"
+} else {
+    Write-Warn "n8n not ready — set up manually at http://localhost:5678"
+}
+
 # ── Seed demo data ────────────────────────────────────────
 Write-Step "Seeding demo data"
 $patientCount = (docker exec n8n_postgres psql -U n8n -d n8n -t -c "SELECT COUNT(*) FROM patients" 2>&1) -join '' -replace '\s',''
@@ -220,6 +255,7 @@ Write-Host ""
 Write-Host "  UI:        http://localhost:3000" -ForegroundColor White
 Write-Host "  API:       http://localhost:3001/api/health" -ForegroundColor DarkGray
 Write-Host "  n8n:       http://localhost:5678" -ForegroundColor DarkGray
+Write-Host "             login: demo@nvision.ai / DemoAdmin123!" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Stop:      .\scripts\start-demo.ps1 -Stop" -ForegroundColor DarkGray
 Write-Host "  Reset:     .\scripts\start-demo.ps1 -Reset" -ForegroundColor DarkGray

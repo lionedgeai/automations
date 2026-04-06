@@ -150,6 +150,86 @@ export async function deleteCampaign(id: number): Promise<void> {
   }
 }
 
+// ============ Recipient Management ============
+
+export interface CampaignRecipient {
+  id: number;
+  patient_id: number;
+  email_override: string | null;
+  cadence_step: number;
+  channel: string;
+  status: string;
+  patient_name: string;
+  original_email: string;
+  phone: string;
+  procedure_interest: string;
+  engagement_score: number;
+}
+
+export async function getCampaignRecipientsList(campaignId: number): Promise<CampaignRecipient[]> {
+  const response = await fetch(`${API_BASE}/campaigns/${campaignId}/recipients`);
+  if (!response.ok) throw new Error('Failed to fetch recipients');
+  return await response.json();
+}
+
+export async function addCampaignRecipient(campaignId: number, patientId: number, emailOverride?: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/campaigns/${campaignId}/recipients`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ patient_id: patientId, email_override: emailOverride }),
+  });
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || 'Failed to add recipient');
+  }
+}
+
+export async function updateRecipientEmail(campaignId: number, patientId: number, emailOverride: string | null): Promise<void> {
+  const response = await fetch(`${API_BASE}/campaigns/${campaignId}/recipients/${patientId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email_override: emailOverride }),
+  });
+  if (!response.ok) throw new Error('Failed to update recipient');
+}
+
+export async function bulkOverrideEmails(campaignId: number, emailOverride: string | null): Promise<void> {
+  const response = await fetch(`${API_BASE}/campaigns/${campaignId}/recipients-override`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email_override: emailOverride }),
+  });
+  if (!response.ok) throw new Error('Failed to bulk override');
+}
+
+export async function removeCampaignRecipient(campaignId: number, patientId: number): Promise<void> {
+  const response = await fetch(`${API_BASE}/campaigns/${campaignId}/recipients/${patientId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Failed to remove recipient');
+}
+
+export async function removeAllCampaignRecipients(campaignId: number): Promise<{ deleted: number }> {
+  const response = await fetch(`${API_BASE}/campaigns/${campaignId}/recipients`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Failed to remove all recipients');
+  return await response.json();
+}
+
+export async function searchPatients(query: string): Promise<Array<{
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  procedure_interest: string;
+  engagement_score: number;
+}>> {
+  const response = await fetch(`${API_BASE}/patients?search=${encodeURIComponent(query)}`);
+  if (!response.ok) throw new Error('Failed to search patients');
+  return await response.json();
+}
+
 export async function approveCampaign(
   id: number,
   dateRange?: { start: string; end: string }
@@ -163,5 +243,51 @@ export async function approveCampaign(
     if (!response.ok) throw new Error('API not ready');
   } catch {
     console.log(`Mock: Approved campaign ${id}`);
+  }
+}
+
+export interface DeliveryEntry {
+  id: number;
+  channel: string;
+  status: string;
+  sent_at: string;
+  tracking_id: string | null;
+  patient_name: string;
+  email: string;
+  cadence_step: number;
+}
+
+export interface SendResult {
+  success: boolean;
+  sent: number;
+  failed: number;
+  results: Array<{
+    patient: string;
+    email: string;
+    status: string;
+    emailId?: string;
+    error?: string;
+  }>;
+}
+
+export async function sendCampaign(id: number): Promise<SendResult> {
+  const response = await fetch(`${API_BASE}/campaigns/${id}/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || 'Failed to send campaign');
+  }
+  return await response.json();
+}
+
+export async function getCampaignDelivery(id: number): Promise<DeliveryEntry[]> {
+  try {
+    const response = await fetch(`${API_BASE}/campaigns/${id}/delivery`);
+    if (!response.ok) throw new Error('API not ready');
+    return await response.json();
+  } catch {
+    return [];
   }
 }

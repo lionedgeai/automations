@@ -217,7 +217,7 @@ export default function AnalyticsPage() {
         <select
           value={selectedCampaignId || ''}
           onChange={(e) => setSelectedCampaignId(parseInt(e.target.value))}
-          className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary"
         >
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>

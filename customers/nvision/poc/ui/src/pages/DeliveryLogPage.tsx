@@ -49,7 +49,7 @@ export default function DeliveryLogPage() {
       case 'opened':
         return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
       case 'clicked':
-        return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+        return 'bg-primary/10 text-primary-light border-primary/20';
       case 'failed':
         return 'bg-red-500/10 text-red-400 border-red-500/20';
       default:
@@ -90,7 +90,7 @@ export default function DeliveryLogPage() {
         <button
           onClick={handleSimulate}
           disabled={simulating}
-          className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+          className="px-6 py-2 bg-primary hover:bg-primary-dark disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors"
         >
           {simulating ? '🔄 Simulating...' : '🧪 Simulate Send'}
         </button>
@@ -106,7 +106,7 @@ export default function DeliveryLogPage() {
             <select
               value={channelFilter}
               onChange={(e) => setChannelFilter(e.target.value)}
-              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="">All Channels</option>
               <option value="email">Email</option>
@@ -118,7 +118,7 @@ export default function DeliveryLogPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="">All Statuses</option>
               <option value="sent">Sent</option>

@@ -7,12 +7,14 @@ export interface AIStatus {
     openai: boolean;
     github: boolean;
     mock: boolean;
+    resend: boolean;
   };
   models: {
     anthropic: string;
     openai: string;
     github: string;
   };
+  resend_from: string;
 }
 
 export async function getAIStatus(): Promise<AIStatus> {
@@ -27,6 +29,8 @@ export async function updateAIConfig(config: {
   anthropic_model?: string;
   openai_api_key?: string;
   openai_model?: string;
+  resend_api_key?: string;
+  resend_from?: string;
 }): Promise<AIStatus> {
   const response = await fetch(`${API_BASE}/ai/config`, {
     method: 'POST',
@@ -39,6 +43,12 @@ export async function updateAIConfig(config: {
 
 export async function testAIConnection(): Promise<{ success: boolean; provider: string; message: string }> {
   const response = await fetch(`${API_BASE}/ai/test`, { method: 'POST' });
+  if (!response.ok) throw new Error('API not ready');
+  return await response.json();
+}
+
+export async function testResendConnection(): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE}/email/test`, { method: 'POST' });
   if (!response.ok) throw new Error('API not ready');
   return await response.json();
 }
