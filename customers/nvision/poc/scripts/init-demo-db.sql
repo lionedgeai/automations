@@ -119,6 +119,7 @@ CREATE TABLE campaign_recipients (
   selected_sms_variant_id INT REFERENCES campaign_content_variants(id) ON DELETE SET NULL,
   cadence_step INT NOT NULL, -- which step in the cadence (1, 2, 3, ...)
   channel VARCHAR(10) NOT NULL CHECK (channel IN ('email', 'sms')),
+  email_override VARCHAR(255),
   scheduled_time TIMESTAMP,
   status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'scheduled', 'sent', 'failed')),
   created_at TIMESTAMP DEFAULT NOW()
